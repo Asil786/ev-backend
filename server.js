@@ -14,6 +14,6 @@ app.use("/api/customers", customerRoutes);
 app.use("/api/stations", stationRoutes);
 app.use("/api/trips", tripRoutes);
 
-app.listen(process.env.PORT || 5000, () => {
+app.listen(process.env.URL_BACKEND,() => {
   console.log("Backend running");
 });
