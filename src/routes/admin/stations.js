@@ -150,21 +150,21 @@ LIMIT ? OFFSET ?
 
       return {
         id: s.id,
-        stationName: s.stationName,
-        stationNumber: s.stationNumber,
-        latitude: s.latitude,
-        longitude: s.longitude,
-        networkName: s.networkName,
-        userName: s.userName,
-        addedByType: s.addedByType,
-        contactNumber: s.contactNumber,
-        usageType: s.usageType,
-        operationalHours: s.operationalHours,
-        status: s.status,
+        stationName: s.stationName || "-",
+        stationNumber: s.stationNumber || `CS-${s.id}`,
+        latitude: s.latitude ?? 0,
+        longitude: s.longitude ?? 0,
+        networkName: s.networkName || "-",
+        userName: s.userName || "-",
+        addedByType: s.addedByType || "EV Owner",
+        contactNumber: s.contactNumber || "-",
+        usageType: s.usageType || "Public",
+        operationalHours: s.operationalHours || "-",
+        status: s.status || "Pending",
         submissionDate: s.submissionDate,
-        approvalDate: s.approvalDate,
-        photos: s.photos,
-        connectors,          // empty array if none
+        approvalDate: s.approvalDate ?? null,
+        photos: Array.isArray(s.photos) ? s.photos : [],
+        connectors: connectors, // empty array is SAFE
         eVolts: totalConnectorCount * 2
       };
     });
