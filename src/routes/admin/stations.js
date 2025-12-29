@@ -4,6 +4,12 @@ import { getPagination } from "../../utils/pagination.js";
 
 const router = express.Router();
 
+import express from "express";
+import { db } from "../../db.js";
+import { getPagination } from "../../utils/pagination.js";
+
+const router = express.Router();
+
 /**
  * =====================================================
  * GET /api/stations
@@ -204,6 +210,37 @@ const data = Array.from(stationMap.values()).map(s => {
   }
 });
 
+/**
+ * =====================================================
+ * PUT /api/stations/:id/status
+ * =====================================================
+ */
+router.put("/:id/status", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!["Approved", "Rejected"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
+    await db.query(
+      `
+      UPDATE charging_station
+      SET approved_status = ?, updated_at = NOW()
+      WHERE id = ?
+      `,
+      [status.toUpperCase(), id]
+    );
+
+    res.json({ message: `Station ${status} successfully` });
+  } catch (err) {
+    console.error("PUT /stations/:id/status ERROR:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+export default router;
 /**
  * =====================================================
  * PUT /api/stations/:id/status
