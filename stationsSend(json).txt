@@ -1,0 +1,254 @@
+{
+  "data": [
+    {
+      "id": 21055,
+      "stationName": "Test",
+      "stationNumber": "CS-21055",
+      "latitude": 19.0176147,
+      "longitude": 72.8561644,
+      "networkName": "EV GATEWAY'S",
+      "userName": "Harsh Kumawat\t",
+      "addedByType": "CPO",
+      "contactNumber": "8109967702",
+      "usageType": "Public",
+      "operationalHours": "-",
+      "status": "Pending",
+      "submissionDate": "2025-12-26T11:00:34.000Z",
+      "approvalDate": null,
+      "photos": [],
+      "connectors": [
+        {
+          "type": "-",
+          "name": "-",
+          "count": 0,
+          "powerRating": "-",
+          "tariff": "-"
+        }
+      ],
+      "eVolts": 0
+    },
+    {
+      "id": 21054,
+      "stationName": "Harsh s",
+      "stationNumber": "CS-21054",
+      "latitude": 19.0176147,
+      "longitude": 72.8561644,
+      "networkName": "EV GATEWAY'S",
+      "userName": "Harsh Kumawat\t",
+      "addedByType": "CPO",
+      "contactNumber": "8109967702",
+      "usageType": "Public",
+      "operationalHours": "-",
+      "status": "Pending",
+      "submissionDate": "2025-12-26T10:49:54.000Z",
+      "approvalDate": null,
+      "photos": [],
+      "connectors": [
+        {
+          "type": "-",
+          "name": "-",
+          "count": 0,
+          "powerRating": "-",
+          "tariff": "-"
+        }
+      ],
+      "eVolts": 0
+    },
+    {
+      "id": 21053,
+      "stationName": "Harsh Station",
+      "stationNumber": "CS-21053",
+      "latitude": 19.0176147,
+      "longitude": 72.8561644,
+      "networkName": "EV GATEWAY'S",
+      "userName": "Harsh Kumawat\t",
+      "addedByType": "CPO",
+      "contactNumber": "8109967702",
+      "usageType": "Public",
+      "operationalHours": "-",
+      "status": "Pending",
+      "submissionDate": "2025-12-26T10:29:41.000Z",
+      "approvalDate": null,
+      "photos": [],
+      "connectors": [
+        {
+          "type": "-",
+          "name": "-",
+          "count": 0,
+          "powerRating": "-",
+          "tariff": "-"
+        }
+      ],
+      "eVolts": 0
+    },
+    {
+      "id": 21052,
+      "stationName": "test",
+      "stationNumber": "CS-21052",
+      "latitude": 19.1676821756,
+      "longitude": 73.0274766919,
+      "networkName": "COMMUNITY",
+      "userName": "Saffana Siddiqui",
+      "addedByType": "EV Owner",
+      "contactNumber": "8527419632",
+      "usageType": "Public",
+      "operationalHours": "09:00:00 - 21:00:00",
+      "status": "Approved",
+      "submissionDate": "2025-12-26T10:19:05.000Z",
+      "approvalDate": "2025-12-26T10:19:05.000Z",
+      "photos": [],
+      "connectors": [
+        {
+          "type": "-",
+          "name": "-",
+          "count": 0,
+          "powerRating": "-",
+          "tariff": "-"
+        }
+      ],
+      "eVolts": 0
+    },
+    {
+      "id": 21051,
+      "stationName": "test",
+      "stationNumber": "CS-21051",
+      "latitude": 19.1676821756,
+      "longitude": 73.0274766919,
+      "networkName": "COMMUNITY",
+      "userName": "Saffana Siddiqui",
+      "addedByType": "EV Owner",
+      "contactNumber": "8527419632",
+      "usageType": "Public",
+      "operationalHours": "09:00:00 - 21:00:00",
+      "status": "Approved",
+      "submissionDate": "2025-12-26T10:18:12.000Z",
+      "approvalDate": "2025-12-26T10:18:12.000Z",
+      "photos": [],
+      "connectors": [
+        {
+          "type": "-",
+          "name": "-",
+          "count": 0,
+          "powerRating": "-",
+          "tariff": "-"
+        }
+      ],
+      "eVolts": 0
+    },
+    {
+      "id": 21050,
+      "stationName": "test",
+      "stationNumber": "CS-21050",
+      "latitude": 19.1799990451,
+      "longitude": 73.0437612534,
+      "networkName": "COMMUNITY",
+      "userName": "Saffana Siddiqui",
+      "addedByType": "EV Owner",
+      "contactNumber": "",
+      "usageType": "Public",
+      "operationalHours": "09:00:00 - 18:30:00",
+      "status": "Approved",
+      "submissionDate": "2025-12-26T10:18:05.000Z",
+      "approvalDate": "2025-12-26T10:18:05.000Z",
+      "photos": [],
+      "connectors": [
+        {
+          "type": "-",
+          "name": "-",
+          "count": 0,
+          "powerRating": "-",
+          "tariff": "-"
+        }
+      ],
+      "eVolts": 0
+    },
+    {
+      "id": 21049,
+      "stationName": "test",
+      "stationNumber": "CS-21049",
+      "latitude": 19.1676821756,
+      "longitude": 73.0274766919,
+      "networkName": "COMMUNITY",
+      "userName": "Saffana Siddiqui",
+      "addedByType": "EV Owner",
+      "contactNumber": "8527419632",
+      "usageType": "Public",
+      "operationalHours": "09:00:00 - 21:00:00",
+      "status": "Approved",
+      "submissionDate": "2025-12-26T10:17:33.000Z",
+      "approvalDate": "2025-12-26T10:17:33.000Z",
+      "photos": [],
+      "connectors": [
+        {
+          "type": "-",
+          "name": "-",
+          "count": 0,
+          "powerRating": "-",
+          "tariff": "-"
+        }
+      ],
+      "eVolts": 0
+    },
+    {
+      "id": 21048,
+      "stationName": "harsh station",
+      "stationNumber": "CS-21048",
+      "latitude": 23.4618254,
+      "longitude": 74.9244386,
+      "networkName": "EV GATEWAY'S",
+      "userName": "Harsh Kumawat\t",
+      "addedByType": "CPO",
+      "contactNumber": "8109967702",
+      "usageType": "Public",
+      "operationalHours": "-",
+      "status": "Pending",
+      "submissionDate": "2025-12-26T09:43:44.000Z",
+      "approvalDate": null,
+      "photos": [
+        "IMAGE/"
+      ],
+      "connectors": [
+        {
+          "type": "-",
+          "name": "-",
+          "count": 0,
+          "powerRating": "-",
+          "tariff": "-"
+        }
+      ],
+      "eVolts": 0
+    },
+    {
+      "id": 21047,
+      "stationName": "MH | Solapur | Somani Hyundai",
+      "stationNumber": "CS-21047",
+      "latitude": 17.634861,
+      "longitude": 75.92138431,
+      "networkName": "CHARGE ZONE",
+      "userName": null,
+      "addedByType": "EV Owner",
+      "contactNumber": null,
+      "usageType": "Public",
+      "operationalHours": "00:00:00 - 23:59:59",
+      "status": "Approved",
+      "submissionDate": "2025-12-26T09:30:15.000Z",
+      "approvalDate": null,
+      "photos": [],
+      "connectors": [
+        {
+          "type": "-",
+          "name": "-",
+          "count": 0,
+          "powerRating": "-",
+          "tariff": "-"
+        }
+      ],
+      "eVolts": 0
+    }
+  ],
+  "pagination": {
+    "total": 6700,
+    "page": 1,
+    "limit": 10
+  }
+}
