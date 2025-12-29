@@ -1,26 +1,15 @@
-import express from "express";
-import { db } from "../../db.js";
-import { getPagination } from "../../utils/pagination.js";
-
-const router = express.Router();
-
 /**
  * =====================================================
- * GET /api/stations
+ * GET /api/stations/:id
  * =====================================================
  */
-router.get("/", async (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
-    const { page, limit, offset } = getPagination(req.query);
+    const { id } = req.params;
 
-    /**
-     * =====================================================
-     * FETCH ALL DATA (RELATIONAL)
-     * =====================================================
-     */
-    const [rows] = await db.query(`
+    const [rows] = await db.query(
+      `
 SELECT
-  -- station
   cs.id,
   cs.name AS stationName,
   cs.latitude,
@@ -29,152 +18,115 @@ SELECT
   cs.created_at AS submissionDate,
   cs.updated_at AS approvalDate,
   cs.approved_status AS status,
-  cs.type AS usageType,
-  cs.station_type AS stationType,
   cs.open_time,
   cs.close_time,
+  cs.type AS usageType,
 
-  -- user
-  cu.id AS userDbId,
-  cu.email AS userId,
-  CONCAT(cu.first_name, ' ', cu.last_name) AS userName,
-  cu.name_type,
-
-  -- network
   n.name AS networkName,
 
-  -- connector
-  c.id AS connectorId,
-  ct.name AS connectorName,
+  CONCAT(cu.first_name, ' ', cu.last_name) AS userName,
+  cu.id AS userId,
+  CASE
+    WHEN cu.name_type = 'IS_VANGUARD' THEN 'CPO'
+    ELSE 'EV Owner'
+  END AS addedByType,
+
   ct.type AS connectorType,
+  ct.name AS connectorName,
   ct.max_power AS powerRating,
 
-  -- tariff (if exists, else null)
-  c.tariff,
-
-  -- photos
   a.path AS photoPath
 
 FROM charging_station cs
-LEFT JOIN customer cu ON cu.id = cs.created_by
 LEFT JOIN network n ON n.id = cs.network_id
+LEFT JOIN customer cu ON cu.id = cs.created_by
 LEFT JOIN charging_point cp ON cp.station_id = cs.id
 LEFT JOIN stations_connectors sc ON sc.charge_point_id = cp.id
 LEFT JOIN connector c ON c.id = sc.connector_id
 LEFT JOIN charger_types ct ON ct.id = c.charger_type_id
 LEFT JOIN attachment a ON a.station_id = cs.id
+WHERE cs.id = ?
+LIMIT 1
+      `,
+      [id]
+    );
 
-ORDER BY cs.created_at DESC
-LIMIT ? OFFSET ?
-`, [limit, offset]);
-
-    /**
-     * =====================================================
-     * BUILD FULL INTERNAL OBJECT
-     * =====================================================
-     */
-    const stationMap = new Map();
-
-    for (const r of rows) {
-      if (!stationMap.has(r.id)) {
-        stationMap.set(r.id, {
-          // FULL DATA (internal)
-          id: r.id,
-          stationName: r.stationName,
-          stationNumber: `CS-${r.id}`,
-          userId: r.userId,
-          userName: r.userName,
-          addedByType:
-            r.name_type === "IS_VANGUARD" ? "CPO" : "EV Owner",
-          networkName: r.networkName,
-          usageType: r.usageType === "PUBLIC" ? "Public" : "Private",
-          stationType: r.stationType,
-          operationalHours:
-            r.open_time && r.close_time
-              ? `${r.open_time} - ${r.close_time}`
-              : "-",
-          status:
-            r.status === "APPROVED"
-              ? "Approved"
-              : r.status === "REJECTED"
-              ? "Rejected"
-              : "Pending",
-          submissionDate: r.submissionDate,
-          approvalDate:
-            r.status === "APPROVED" ? r.approvalDate : null,
-          contactNumber: r.contactNumber,
-          latitude: r.latitude,
-          longitude: r.longitude,
-          photos: [],
-          connectorsMap: new Map()
-        });
-      }
-
-      const station = stationMap.get(r.id);
-
-      // photos
-      if (r.photoPath && !station.photos.includes(r.photoPath)) {
-        station.photos.push(r.photoPath);
-      }
-
-      // connectors
-      if (r.connectorId) {
-        if (!station.connectorsMap.has(r.connectorId)) {
-          station.connectorsMap.set(r.connectorId, {
-            name: r.connectorName,
-            type: r.connectorType,
-            count: 1,
-            powerRating: r.powerRating
-              ? `${r.powerRating} kW`
-              : "-",
-            tariff: r.tariff || "-"
-          });
-        } else {
-          station.connectorsMap.get(r.connectorId).count++;
-        }
-      }
+    if (!rows.length) {
+      return res.status(404).json({ message: "Charging station not found" });
     }
 
     /**
      * =====================================================
-     * RETURN ONLY FRONTEND-SAFE DATA
+     * TRANSFORM (single station)
      * =====================================================
      */
-    const data = Array.from(stationMap.values()).map(s => {
-      const connectors = Array.from(s.connectorsMap.values());
+    const station = {
+      id: rows[0].id,
+      stationName: rows[0].stationName,
+      stationNumber: `CS-${rows[0].id}`,
+      latitude: rows[0].latitude,
+      longitude: rows[0].longitude,
+      networkName: rows[0].networkName,
+      userName: rows[0].userName,
+      userId: rows[0].userId,
+      addedByType: rows[0].addedByType,
+      contactNumber: rows[0].contactNumber,
+      usageType: rows[0].usageType === "PUBLIC" ? "Public" : "Private",
+      operationalHours:
+        rows[0].open_time && rows[0].close_time
+          ? `${rows[0].open_time} - ${rows[0].close_time}`
+          : "-",
+      status:
+        rows[0].status === "APPROVED"
+          ? "Approved"
+          : rows[0].status === "REJECTED"
+          ? "Rejected"
+          : "Pending",
+      submissionDate: rows[0].submissionDate,
+      approvalDate:
+        rows[0].status === "APPROVED" ? rows[0].approvalDate : null,
+      photos: [],
+      connectorsMap: new Map()
+    };
 
-      const totalConnectorCount = connectors.reduce(
-        (sum, c) => sum + c.count,
-        0
-      );
+    for (const r of rows) {
+      if (r.photoPath && !station.photos.includes(r.photoPath)) {
+        station.photos.push(r.photoPath);
+      }
 
-      return {
-        id: s.id,
-        stationName: s.stationName || "-",
-        stationNumber: s.stationNumber || `CS-${s.id}`,
-        latitude: s.latitude ?? 0,
-        longitude: s.longitude ?? 0,
-        networkName: s.networkName || "-",
-        userName: s.userName || "-",
-        addedByType: s.addedByType || "EV Owner",
-        contactNumber: s.contactNumber || "-",
-        usageType: s.usageType || "Public",
-        operationalHours: s.operationalHours || "-",
-        status: s.status || "Pending",
-        submissionDate: s.submissionDate,
-        approvalDate: s.approvalDate ?? null,
-        photos: Array.isArray(s.photos) ? s.photos : [],
-        connectors: connectors, // empty array is SAFE
-        eVolts: totalConnectorCount * 2
-      };
+      if (r.connectorName) {
+        const key = `${r.connectorType}|${r.connectorName}|${r.powerRating}`;
+
+        if (!station.connectorsMap.has(key)) {
+          station.connectorsMap.set(key, {
+            type: r.connectorType,
+            name: r.connectorName,
+            count: 1,
+            powerRating: r.powerRating ? `${r.powerRating} kW` : "-",
+            tariff: "-"
+          });
+        } else {
+          station.connectorsMap.get(key).count += 1;
+        }
+      }
+    }
+
+    const connectors = Array.from(station.connectorsMap.values());
+    const totalConnectorCount = connectors.reduce(
+      (sum, c) => sum + c.count,
+      0
+    );
+
+    delete station.connectorsMap;
+
+    res.json({
+      ...station,
+      connectors: connectors.length ? connectors : [],
+      eVolts: totalConnectorCount * 2
     });
 
-    res.json({ data });
-
   } catch (err) {
-    console.error("GET /stations ERROR:", err);
+    console.error("GET /stations/:id ERROR:", err);
     res.status(500).json({ message: err.message });
   }
 });
-
-export default router;
