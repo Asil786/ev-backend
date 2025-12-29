@@ -93,10 +93,14 @@ LEFT JOIN connector c ON c.charge_point_id = cp.id
 LEFT JOIN charger_types ct ON ct.id = c.charger_type_id
 
 LEFT JOIN (
-  SELECT station_id, SUM(points) AS eVolts
+  SELECT
+    station_id,
+    SUM(points) AS eVolts
   FROM loyalty_points
+  WHERE approved_status = 'APPROVED'
   GROUP BY station_id
 ) lp ON lp.station_id = cs.id
+
 
 LEFT JOIN attachment a ON a.station_id = cs.id
 
