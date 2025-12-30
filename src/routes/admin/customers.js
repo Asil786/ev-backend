@@ -8,10 +8,12 @@ router.get("/", async (req, res) => {
   try {
     const { page, limit, offset } = getPagination(req.query);
 
+    /* ---------- TOTAL COUNT ---------- */
     const [[{ total }]] = await db.query(
       "SELECT COUNT(*) AS total FROM customer"
     );
 
+    /* ---------- MAIN QUERY ---------- */
     const [rows] = await db.query(
       `
       SELECT
@@ -43,7 +45,7 @@ router.get("/", async (req, res) => {
             AND t.trip_status IN ('COMPLETED', 'ON_GOING', 'ON_GOING_TEST')
         ) AS has_navigation,
 
-        /* ---------- TRIP (ANY ACTIVE / USED TRIP) ---------- */
+        /* ---------- TRIP ---------- */
         EXISTS (
           SELECT 1
           FROM trip t
@@ -88,11 +90,15 @@ router.get("/", async (req, res) => {
         LIMIT 1
       )
 
+      /* ---------- ORDERING ---------- */
+      ORDER BY c.id DESC
+
       LIMIT ? OFFSET ?
       `,
       [limit, offset]
     );
 
+    /* ---------- RESPONSE ---------- */
     const data = rows.map(r => ({
       firstName: r.first_name,
       lastName: r.last_name,
@@ -119,7 +125,6 @@ router.get("/", async (req, res) => {
       devicePlatform: r.device_platform,
       appVersion: r.app_version,
 
-      /* ---------- DASHBOARD FLAGS ---------- */
       navigation: r.has_navigation ? "Yes" : "No",
       trip: r.has_trip ? "Yes" : "No",
       checkIn: r.has_checkin ? "Yes" : "No"
