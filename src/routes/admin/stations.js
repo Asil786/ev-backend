@@ -11,6 +11,7 @@ const router = express.Router();
  */
 router.get("/", async (req, res) => {
   try {
+    // Pagination (limit is fixed to 10 inside helper)
     const { page, limit, offset } = getPagination(req.query);
     const { status, startDate, endDate } = req.query;
 
@@ -35,11 +36,13 @@ router.get("/", async (req, res) => {
     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
     /**
-     * TOTAL COUNT
+     * ======================
+     * TOTAL COUNT (STATIONS)
+     * ======================
      */
     const [[{ total }]] = await db.query(
       `
-      SELECT COUNT(DISTINCT cs.id) AS total
+      SELECT COUNT(*) AS total
       FROM charging_station cs
       ${whereSQL}
       `,
@@ -47,7 +50,41 @@ router.get("/", async (req, res) => {
     );
 
     /**
-     * MAIN QUERY
+     * =====================================================
+     * STEP 1: FETCH STATION IDS (PAGINATION SAFE)
+     * =====================================================
+     */
+    const [stationIdRows] = await db.query(
+      `
+      SELECT cs.id
+      FROM charging_station cs
+      ${whereSQL}
+      ORDER BY cs.created_at DESC
+      LIMIT ? OFFSET ?
+      `,
+      [...params, limit, offset]
+    );
+
+    const stationIds = stationIdRows.map(r => r.id);
+
+    // ✅ Edge case:
+    // - DB has less than 10 records
+    // - Page is out of range
+    if (stationIds.length === 0) {
+      return res.json({
+        data: [],
+        pagination: {
+          total,
+          page,
+          limit
+        }
+      });
+    }
+
+    /**
+     * =====================================================
+     * STEP 2: FETCH FULL DATA FOR THOSE STATIONS
+     * =====================================================
      */
     const [rows] = await db.query(
       `
@@ -77,7 +114,6 @@ router.get("/", async (req, res) => {
         ct.name AS chargerName,
         ct.type AS chargerType,
         ct.max_power AS powerRating,
-
         c.no_of_connectors,
         c.price_per_khw,
 
@@ -98,15 +134,16 @@ router.get("/", async (req, res) => {
       ) lp ON lp.station_id = cs.id
       LEFT JOIN attachment a ON a.station_id = cs.id
 
-      ${whereSQL}
+      WHERE cs.id IN (?)
       ORDER BY cs.created_at DESC
-      LIMIT ? OFFSET ?
       `,
-      [...params, limit, offset]
+      [stationIds]
     );
 
     /**
-     * MERGE BY STATION
+     * =====================================================
+     * STEP 3: MERGE + DEDUP
+     * =====================================================
      */
     const stationMap = new Map();
 
@@ -143,28 +180,47 @@ router.get("/", async (req, res) => {
 
       const station = stationMap.get(r.id);
 
+      // PHOTO DEDUP
       if (r.photoPath && !station.photos.includes(r.photoPath)) {
         station.photos.push(r.photoPath);
       }
 
+      // CONNECTOR DEDUP (BY PRIMARY KEY)
       if (r.connectorId) {
-        station.connectors.push({
-          id: r.connectorId,
-          chargerTypeId: r.chargerTypeId,
-          type: r.chargerType,
-          name: r.chargerName,
-          count: r.no_of_connectors || 0,
-          powerRating: r.powerRating ? `${r.powerRating} kW` : "-",
-          tariff: r.price_per_khw
-            ? `₹${r.price_per_khw}/kWh`
-            : "-"
-        });
+        const exists = station.connectors.find(
+          c => c.id === r.connectorId
+        );
+
+        if (!exists) {
+          station.connectors.push({
+            id: r.connectorId,
+            chargerTypeId: r.chargerTypeId,
+            type: r.chargerType,
+            name: r.chargerName,
+            count: r.no_of_connectors || 0,
+            powerRating: r.powerRating
+              ? `${r.powerRating} kW`
+              : "-",
+            tariff: r.price_per_khw
+              ? `₹${r.price_per_khw}/kWh`
+              : "-"
+          });
+        }
       }
     }
 
+    /**
+     * =====================================================
+     * FINAL RESPONSE
+     * =====================================================
+     */
     res.json({
       data: Array.from(stationMap.values()),
-      pagination: { total, page, limit }
+      pagination: {
+        total,
+        page,
+        limit
+      }
     });
 
   } catch (err) {
