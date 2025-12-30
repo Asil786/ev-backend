@@ -34,88 +34,84 @@ router.get("/", async (req, res) => {
 
     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    /**
-     * ======================
-     * TOTAL COUNT
-     * ======================
-     */
+    /* ======================
+       TOTAL COUNT
+    ====================== */
     const [[{ total }]] = await db.query(
-      `SELECT COUNT(DISTINCT cs.id) AS total
-       FROM charging_station cs
-       ${whereSQL}`,
+      `
+      SELECT COUNT(DISTINCT cs.id) AS total
+      FROM charging_station cs
+      ${whereSQL}
+      `,
       params
     );
 
-    /**
-     * ======================
-     * MAIN QUERY
-     * ======================
-     */
+    /* ======================
+       MAIN QUERY
+    ====================== */
     const [rows] = await db.query(
       `
-SELECT
-  cs.id,
-  cs.name AS stationName,
-  cs.latitude,
-  cs.longitude,
-  cs.mobile AS contactNumber,
-  cs.created_at AS submissionDate,
-  cs.updated_at AS approvalDate,
-  cs.approved_status AS status,
-  cs.open_time,
-  cs.close_time,
-  cs.type AS usageType,
+      SELECT
+        cs.id,
+        cs.name AS stationName,
+        cs.latitude,
+        cs.longitude,
+        cs.mobile AS contactNumber,
+        cs.created_at AS submissionDate,
+        cs.updated_at AS approvalDate,
+        cs.approved_status AS status,
+        cs.open_time,
+        cs.close_time,
+        cs.type AS usageType,
 
-  n.name AS networkName,
+        cs.network_id,                 -- ✅ ADDED
+        n.name AS networkName,
 
-  CONCAT(cu.first_name, ' ', cu.last_name) AS userName,
-  CASE
-    WHEN cu.name_type = 'IS_VANGUARD' THEN 'CPO'
-    ELSE 'EV Owner'
-  END AS addedByType,
+        CONCAT(cu.first_name, ' ', cu.last_name) AS userName,
+        CASE
+          WHEN cu.name_type = 'IS_VANGUARD' THEN 'CPO'
+          ELSE 'EV Owner'
+        END AS addedByType,
 
-  ct.name AS chargerName,
-  ct.type AS chargerType,
-  ct.max_power AS powerRating,
+        ct.id AS charger_type_id,       -- ✅ ADDED
+        ct.name AS chargerName,
+        ct.type AS chargerType,
+        ct.max_power AS powerRating,
 
-  c.no_of_connectors,
-  c.price_per_khw,
+        c.no_of_connectors,
+        c.price_per_khw,
 
-  lp.eVolts,
+        lp.eVolts,
+        a.path AS photoPath
 
-  a.path AS photoPath
+      FROM charging_station cs
+      LEFT JOIN network n ON n.id = cs.network_id
+      LEFT JOIN customer cu ON cu.id = cs.created_by
+      LEFT JOIN charging_point cp ON cp.station_id = cs.id
+      LEFT JOIN connector c ON c.charge_point_id = cp.id
+      LEFT JOIN charger_types ct ON ct.id = c.charger_type_id
 
-FROM charging_station cs
-LEFT JOIN network n ON n.id = cs.network_id
-LEFT JOIN customer cu ON cu.id = cs.created_by
-LEFT JOIN charging_point cp ON cp.station_id = cs.id
-LEFT JOIN connector c ON c.charge_point_id = cp.id
-LEFT JOIN charger_types ct ON ct.id = c.charger_type_id
+      LEFT JOIN (
+        SELECT
+          station_id,
+          SUM(points) AS eVolts
+        FROM loyalty_points
+        WHERE approved_status = 'APPROVED'
+        GROUP BY station_id
+      ) lp ON lp.station_id = cs.id
 
-LEFT JOIN (
-  SELECT
-    station_id,
-    SUM(points) AS eVolts
-  FROM loyalty_points
-  WHERE approved_status = 'APPROVED'
-  GROUP BY station_id
-) lp ON lp.station_id = cs.id
+      LEFT JOIN attachment a ON a.station_id = cs.id
 
-
-LEFT JOIN attachment a ON a.station_id = cs.id
-
-${whereSQL}
-ORDER BY cs.created_at DESC
-LIMIT ? OFFSET ?
+      ${whereSQL}
+      ORDER BY cs.created_at DESC
+      LIMIT ? OFFSET ?
       `,
       [...params, limit, offset]
     );
 
-    /**
-     * =====================================================
-     * MERGE STRICTLY BY charging_station.id
-     * =====================================================
-     */
+    /* ======================
+       MERGE BY station.id
+    ====================== */
     const stationMap = new Map();
 
     for (const r of rows) {
@@ -126,7 +122,10 @@ LIMIT ? OFFSET ?
           stationNumber: `CS-${r.id}`,
           latitude: r.latitude,
           longitude: r.longitude,
+
+          networkId: r.network_id,   // ✅ SENT
           networkName: r.networkName,
+
           userName: r.userName,
           addedByType: r.addedByType,
           contactNumber: r.contactNumber,
@@ -151,17 +150,18 @@ LIMIT ? OFFSET ?
 
       const station = stationMap.get(r.id);
 
-      // Photos
+      /* Photos */
       if (r.photoPath && !station.photos.includes(r.photoPath)) {
         station.photos.push(r.photoPath);
       }
 
-      // Connectors
+      /* Connectors */
       if (r.chargerName) {
-        const key = `${r.chargerType}|${r.chargerName}|${r.powerRating}|${r.price_per_khw}`;
+        const key = `${r.charger_type_id}|${r.chargerName}|${r.powerRating}|${r.price_per_khw}`;
 
         if (!station.connectorsMap.has(key)) {
           station.connectorsMap.set(key, {
+            chargerTypeId: r.charger_type_id,  // ✅ SENT
             type: r.chargerType,
             name: r.chargerName,
             count: r.no_of_connectors || 0,
@@ -176,18 +176,19 @@ LIMIT ? OFFSET ?
       }
     }
 
-    /**
-     * =====================================================
-     * FINAL RESPONSE
-     * =====================================================
-     */
+    /* ======================
+       FINAL RESPONSE
+    ====================== */
     const data = Array.from(stationMap.values()).map(s => ({
       id: s.id,
       stationName: s.stationName,
       stationNumber: s.stationNumber,
       latitude: s.latitude,
       longitude: s.longitude,
+
+      networkId: s.networkId,   // ✅ FRONTEND GETS THIS
       networkName: s.networkName,
+
       userName: s.userName,
       addedByType: s.addedByType,
       contactNumber: s.contactNumber,
@@ -217,134 +218,29 @@ LIMIT ? OFFSET ?
  * PUT /api/stations/:id/status
  * =====================================================
  */
-router.put("/:id", async (req, res) => {
-  const connection = await db.getConnection();
+router.put("/:id/status", async (req, res) => {
   try {
     const { id } = req.params;
-    const {
-      stationName,
-      network_id,
-      usageType,
-      open_time,
-      close_time,
-      latitude,
-      longitude,
-      contactNumber,
-      connectors
-    } = req.body;
+    const { status } = req.body;
 
-    await connection.beginTransaction();
+    if (!["Approved", "Rejected"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
 
-    /**
-     * =========================
-     * UPDATE charging_station
-     * =========================
-     */
-    await connection.query(
+    await db.query(
       `
       UPDATE charging_station
-      SET
-        name = ?,
-        network_id = ?,
-        type = ?,
-        open_time = ?,
-        close_time = ?,
-        latitude = ?,
-        longitude = ?,
-        mobile = ?,
-        updated_at = NOW()
+      SET approved_status = ?, updated_at = NOW()
       WHERE id = ?
       `,
-      [
-        stationName,
-        network_id,
-        usageType,
-        open_time,
-        close_time,
-        latitude,
-        longitude,
-        contactNumber,
-        id
-      ]
+      [status.toUpperCase(), id]
     );
 
-    /**
-     * =========================
-     * GET charging_point.id
-     * (1 station → 1 CP as per your current logic)
-     * =========================
-     */
-    const [[cp]] = await connection.query(
-      `SELECT id FROM charging_point WHERE station_id = ? LIMIT 1`,
-      [id]
-    );
-
-    let chargePointId = cp?.id;
-
-    if (!chargePointId) {
-      const [cpInsert] = await connection.query(
-        `
-        INSERT INTO charging_point (station_id, status)
-        VALUES (?, 1)
-        `,
-        [id]
-      );
-      chargePointId = cpInsert.insertId;
-    }
-
-    /**
-     * =========================
-     * DELETE OLD CONNECTORS
-     * (UI sends fresh list)
-     * =========================
-     */
-    await connection.query(
-      `DELETE FROM connector WHERE charge_point_id = ?`,
-      [chargePointId]
-    );
-
-    /**
-     * =========================
-     * INSERT NEW CONNECTORS
-     * (multiple connectors)
-     * =========================
-     */
-    for (const c of connectors) {
-      await connection.query(
-        `
-        INSERT INTO connector (
-          charge_point_id,
-          charger_type_id,
-          no_of_connectors,
-          power,
-          price_per_khw,
-          status,
-          created_at
-        )
-        VALUES (?, ?, ?, ?, ?, 1, NOW())
-        `,
-        [
-          chargePointId,
-          c.charger_type_id,
-          c.count,
-          c.power,
-          c.tariff
-        ]
-      );
-    }
-
-    await connection.commit();
-
-    res.json({ message: "Station updated successfully" });
-
+    res.json({ message: `Station ${status} successfully` });
   } catch (err) {
-    await connection.rollback();
-    console.error("PUT /stations/:id ERROR:", err);
+    console.error("PUT /stations/:id/status ERROR:", err);
     res.status(500).json({ message: err.message });
-  } finally {
-    connection.release();
   }
 });
-
 
 export default router;
