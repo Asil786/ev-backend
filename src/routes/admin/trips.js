@@ -1,4 +1,3 @@
-
 import express from "express";
 import { db } from "../../db.js";
 import { getPagination } from "../../utils/pagination.js";
@@ -46,6 +45,7 @@ router.get("/", async (req, res) => {
         t.created_at,
         t.updated_at,
         t.trip_status,
+        t.status AS trip_status_flag,
         t.distance,
         t.feedback,
         t.source,
@@ -119,29 +119,26 @@ router.get("/", async (req, res) => {
 
     /* ---------- FINAL RESPONSE ---------- */
     const data = rows.map(r => {
+      /* ---- Navigation & Check-in (Dashboard View) ---- */
       let navigation = "No";
       let checkIn = "No";
 
-      if (r.trip_status === "COMPLETED") {
+      if (
+        r.trip_status === "COMPLETED" ||
+        r.trip_status === "ON_GOING" ||
+        r.trip_status === "ON_GOING_TEST"
+      ) {
         navigation = "Yes";
         checkIn = "Yes";
-      } else if (r.trip_status === "ON_GOING") {
-        navigation = "Yes";
-        checkIn = "Yes";
-      } else if (r.trip_status === "ON_GOING_TEST") {
-        navigation = "Yes";
-        checkIn = "Yes";
-      } else if (r.trip_status === "ENQUIRED") {
-        navigation = "No";
-        checkIn = "No";
-      } else if (r.trip_status === "SAVED") {
-        navigation = "No";
-        checkIn = "No";
       }
 
+      /* ---- Trip Completion Status (FROM t.status) ---- */
       let tripCompletionStatus = null;
-      if (r.trip_status === "completed") tripCompletionStatus = "Successful";
-      if (r.trip_status === "cancelled") tripCompletionStatus = "Failed";
+      if (r.trip_status_flag === 1) {
+        tripCompletionStatus = "Successful";
+      } else if (r.trip_status_flag === 0) {
+        tripCompletionStatus = "Failed";
+      }
 
       const tripStops = stopsMap[r.id] || [];
       const connectorCount = r.connector_id
@@ -172,7 +169,6 @@ router.get("/", async (req, res) => {
         evVariant: r.vehicle_variant_name || "-",
         evBatteryCapacity: r.battery_capacity || "-",
 
-        /* ✅ EVOLTS FROM LOYALTY POINTS */
         evolts: r.evolts || 0,
 
         feedback: r.feedback || null,
