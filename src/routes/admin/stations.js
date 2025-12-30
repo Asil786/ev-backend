@@ -34,9 +34,7 @@ router.get("/", async (req, res) => {
 
     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    /**
-     * TOTAL COUNT
-     */
+    /* ---------- TOTAL COUNT ---------- */
     const [[{ total }]] = await db.query(
       `
       SELECT COUNT(*) AS total
@@ -46,9 +44,7 @@ router.get("/", async (req, res) => {
       params
     );
 
-    /**
-     * STEP 1: FETCH STATION IDS (PAGINATION SAFE)
-     */
+    /* ---------- STEP 1: FETCH STATION IDS ---------- */
     const [stationIdRows] = await db.query(
       `
       SELECT cs.id
@@ -69,9 +65,7 @@ router.get("/", async (req, res) => {
       });
     }
 
-    /**
-     * STEP 2: FETCH FULL DATA
-     */
+    /* ---------- STEP 2: FETCH FULL DATA ---------- */
     const [rows] = await db.query(
       `
       SELECT
@@ -83,6 +77,7 @@ router.get("/", async (req, res) => {
         cs.created_at AS submissionDate,
         cs.updated_at AS approvalDate,
         cs.approved_status AS status,
+        cs.reason AS rejectionReason,
         cs.open_time,
         cs.close_time,
         cs.type AS usageType,
@@ -126,9 +121,7 @@ router.get("/", async (req, res) => {
       [stationIds]
     );
 
-    /**
-     * MERGE + DEDUP
-     */
+    /* ---------- MERGE + DEDUP ---------- */
     const stationMap = new Map();
 
     for (const r of rows) {
@@ -156,6 +149,9 @@ router.get("/", async (req, res) => {
               : "Pending",
           submissionDate: r.submissionDate,
           approvalDate: r.status === "APPROVED" ? r.approvalDate : null,
+
+          reason: r.rejectionReason || "-",   // ✅ SENT TO FRONTEND
+
           photos: [],
           connectors: [],
           eVolts: r.eVolts || 0
@@ -228,9 +224,6 @@ router.put("/:id", async (req, res) => {
 
     await connection.beginTransaction();
 
-    /**
-     * APPROVE
-     */
     if (action === "APPROVE") {
       await connection.query(
         `
@@ -258,15 +251,7 @@ router.put("/:id", async (req, res) => {
       return res.json({ message: "Station approved" });
     }
 
-    /**
-     * REJECT
-     */
     if (action === "REJECT") {
-      const rejectReason =
-        typeof reason === "string" && reason.trim()
-          ? reason.trim()
-          : null;
-
       await connection.query(
         `
         UPDATE charging_station
@@ -276,7 +261,7 @@ router.put("/:id", async (req, res) => {
             updated_at = NOW()
         WHERE id = ?
         `,
-        [rejectReason, id]
+        [reason || null, id]
       );
 
       await connection.query(
@@ -293,9 +278,6 @@ router.put("/:id", async (req, res) => {
       return res.json({ message: "Station rejected" });
     }
 
-    /**
-     * SAVE
-     */
     if (action === "SAVE") {
       await connection.query(
         `
@@ -319,49 +301,6 @@ router.put("/:id", async (req, res) => {
           id
         ]
       );
-
-      const [[cp]] = await connection.query(
-        `SELECT id FROM charging_point WHERE station_id = ? LIMIT 1`,
-        [id]
-      );
-
-      let chargePointId = cp?.id;
-      if (!chargePointId) {
-        const [insert] = await connection.query(
-          `INSERT INTO charging_point (station_id, status) VALUES (?, 1)`,
-          [id]
-        );
-        chargePointId = insert.insertId;
-      }
-
-      await connection.query(
-        `DELETE FROM connector WHERE charge_point_id = ?`,
-        [chargePointId]
-      );
-
-      for (const c of connectors) {
-        await connection.query(
-          `
-          INSERT INTO connector (
-            charge_point_id,
-            charger_type_id,
-            no_of_connectors,
-            power,
-            price_per_khw,
-            status,
-            created_at
-          )
-          VALUES (?, ?, ?, ?, ?, 1, NOW())
-          `,
-          [
-            chargePointId,
-            c.chargerTypeId,
-            c.count,
-            c.powerRating ? parseFloat(c.powerRating) : null,
-            c.tariff ? parseFloat(c.tariff) : null
-          ]
-        );
-      }
 
       await connection.commit();
       return res.json({ message: "Station updated successfully" });
