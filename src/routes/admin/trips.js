@@ -1,3 +1,4 @@
+
 import express from "express";
 import { db } from "../../db.js";
 import { getPagination } from "../../utils/pagination.js";
@@ -124,12 +125,18 @@ router.get("/", async (req, res) => {
       if (r.trip_status === "COMPLETED") {
         navigation = "Yes";
         checkIn = "Yes";
-      } else if (r.trip_status === "ENQUIRED") {
+      } else if (r.trip_status === "ON_GOING") {
         navigation = "Yes";
+        checkIn = "Yes";
+      } else if (r.trip_status === "ON_GOING_TEST") {
+        navigation = "Yes";
+        checkIn = "Yes";
+      } else if (r.trip_status === "ENQUIRED") {
+        navigation = "No";
         checkIn = "No";
       } else if (r.trip_status === "SAVED") {
         navigation = "No";
-        checkIn = "Yes";
+        checkIn = "No";
       }
 
       let tripCompletionStatus = null;
