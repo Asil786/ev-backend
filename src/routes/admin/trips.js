@@ -46,6 +46,7 @@ router.get("/", async (req, res) => {
         t.updated_at,
         t.trip_status,
         t.status AS trip_status_flag,
+        t.name AS actionByName,
         t.distance,
         t.feedback,
         t.source,
@@ -131,11 +132,12 @@ router.get("/", async (req, res) => {
         checkIn = "Yes";
       }
 
-      /* ---- UPDATED TRIP COMPLETION LOGIC ---- */
-      let tripCompletionStatus = "Failed";
-      if (r.trip_status_flag === 1 && r.trip_status === "COMPLETED") {
-        tripCompletionStatus = "Successful";
-      }
+      const successfulStatuses = ["COMPLETED", "ON_GOING", "ON_GOING_TEST"];
+      
+      let tripCompletionStatus =
+        r.trip_status_flag === 1 && successfulStatuses.includes(r.trip_status)
+          ? "Successful"
+          : "Failed";
 
       const tripStops = stopsMap[r.id] || [];
       const connectorCount = r.connector_id
@@ -175,11 +177,13 @@ router.get("/", async (req, res) => {
         tripStatus: r.trip_status,
         tripCompletionStatus,
 
+        approvedBy: r.actionByName || "-",
+
         hasTripStory: r.feedback ? "Yes" : "No",
         storyStatus: null,
 
         approvalDate: r.updated_at,
-        approvedBy: null
+        approvedById: null
       };
     });
 
@@ -190,6 +194,61 @@ router.get("/", async (req, res) => {
 
   } catch (err) {
     console.error("GET /trips ERROR:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
+/**
+ * =====================================================
+ * PUT /api/trips/story/:id/
+ * =====================================================
+ */
+router.put("/story/:id/", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, name } = req.body;
+
+    if (!["Approved", "Rejected"].includes(action)) {
+      return res.status(400).json({ message: "Invalid action" });
+    }
+
+    if (!name) {
+      return res.status(400).json({
+        message: "Name is required for approval or rejection"
+      });
+    }
+
+    if (action === "Approved") {
+      await db.query(
+        `
+        UPDATE trip
+        SET
+          name = ?,
+          updated_at = NOW()
+        WHERE id = ? AND feedback IS NOT NULL
+        `,
+        [`Approved By: ${name}`, id]
+      );
+    }
+
+    if (action === "Rejected") {
+      await db.query(
+        `
+        UPDATE trip
+        SET
+          feedback = NULL,
+          name = ?,
+          updated_at = NOW()
+        WHERE id = ?
+        `,
+        [`Rejected By: ${name}`, id]
+      );
+    }
+
+    res.json({ message: `Trip story ${action.toLowerCase()} successfully` });
+
+  } catch (err) {
+    console.error("PUT /trips/story/:id ERROR:", err);
     res.status(500).json({ message: err.message });
   }
 });
