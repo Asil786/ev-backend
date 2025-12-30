@@ -198,7 +198,7 @@ router.get("/", async (req, res) => {
  * PUT /api/stations/:id
  * =====================================================
  */
-router.put("/:id", async (req, res) => {
+router.put("stations/:id", async (req, res) => {
   const connection = await db.getConnection();
   try {
     const { id } = req.params;
