@@ -218,29 +218,132 @@ router.get("/", async (req, res) => {
  * PUT /api/stations/:id/status
  * =====================================================
  */
-router.put("/:id/status", async (req, res) => {
+router.put("/:id", async (req, res) => {
+  const connection = await db.getConnection();
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const {
+      stationName,
+      network_id,
+      usageType,
+      open_time,
+      close_time,
+      latitude,
+      longitude,
+      contactNumber,
+      connectors
+    } = req.body;
 
-    if (!["Approved", "Rejected"].includes(status)) {
-      return res.status(400).json({ message: "Invalid status" });
-    }
+    await connection.beginTransaction();
 
-    await db.query(
+    /**
+     * =========================
+     * UPDATE charging_station
+     * =========================
+     */
+    await connection.query(
       `
       UPDATE charging_station
-      SET approved_status = ?, updated_at = NOW()
+      SET
+        name = ?,
+        network_id = ?,
+        type = ?,
+        open_time = ?,
+        close_time = ?,
+        latitude = ?,
+        longitude = ?,
+        mobile = ?,
+        updated_at = NOW()
       WHERE id = ?
       `,
-      [status.toUpperCase(), id]
+      [
+        stationName,
+        network_id,
+        usageType,
+        open_time,
+        close_time,
+        latitude,
+        longitude,
+        contactNumber,
+        id
+      ]
     );
 
-    res.json({ message: `Station ${status} successfully` });
+    /**
+     * =========================
+     * GET charging_point.id
+     * (1 station → 1 CP as per your current logic)
+     * =========================
+     */
+    const [[cp]] = await connection.query(
+      `SELECT id FROM charging_point WHERE station_id = ? LIMIT 1`,
+      [id]
+    );
+
+    let chargePointId = cp?.id;
+
+    if (!chargePointId) {
+      const [cpInsert] = await connection.query(
+        `
+        INSERT INTO charging_point (station_id, status)
+        VALUES (?, 1)
+        `,
+        [id]
+      );
+      chargePointId = cpInsert.insertId;
+    }
+
+    /**
+     * =========================
+     * DELETE OLD CONNECTORS
+     * (UI sends fresh list)
+     * =========================
+     */
+    await connection.query(
+      `DELETE FROM connector WHERE charge_point_id = ?`,
+      [chargePointId]
+    );
+
+    /**
+     * =========================
+     * INSERT NEW CONNECTORS
+     * (multiple connectors)
+     * =========================
+     */
+    for (const c of connectors) {
+      await connection.query(
+        `
+        INSERT INTO connector (
+          charge_point_id,
+          charger_type_id,
+          no_of_connectors,
+          power,
+          price_per_khw,
+          status,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, ?, 1, NOW())
+        `,
+        [
+          chargePointId,
+          c.charger_type_id,
+          c.count,
+          c.power,
+          c.tariff
+        ]
+      );
+    }
+
+    await connection.commit();
+
+    res.json({ message: "Station updated successfully" });
+
   } catch (err) {
-    console.error("PUT /stations/:id/status ERROR:", err);
+    await connection.rollback();
+    console.error("PUT /stations/:id ERROR:", err);
     res.status(500).json({ message: err.message });
+  } finally {
+    connection.release();
   }
 });
-
 export default router;
