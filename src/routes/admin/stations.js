@@ -34,76 +34,88 @@ router.get("/", async (req, res) => {
 
     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    /* ---------- TOTAL COUNT ---------- */
+    /**
+     * ======================
+     * TOTAL COUNT
+     * ======================
+     */
     const [[{ total }]] = await db.query(
-      `SELECT COUNT(DISTINCT cs.id) AS total FROM charging_station cs ${whereSQL}`,
+      `SELECT COUNT(DISTINCT cs.id) AS total
+       FROM charging_station cs
+       ${whereSQL}`,
       params
     );
 
-    /* ---------- MAIN QUERY ---------- */
+    /**
+     * ======================
+     * MAIN QUERY
+     * ======================
+     */
     const [rows] = await db.query(
       `
-      SELECT
-        cs.id,
-        cs.name AS stationName,
-        cs.latitude,
-        cs.longitude,
-        cs.mobile AS contactNumber,
-        cs.created_at AS submissionDate,
-        cs.updated_at AS approvalDate,
-        cs.approved_status AS status,
-        cs.verified,
-        cs.reason,
-        cs.open_time,
-        cs.close_time,
-        cs.type AS usageType,
+SELECT
+  cs.id,
+  cs.name AS stationName,
+  cs.latitude,
+  cs.longitude,
+  cs.mobile AS contactNumber,
+  cs.created_at AS submissionDate,
+  cs.updated_at AS approvalDate,
+  cs.approved_status AS status,
+  cs.open_time,
+  cs.close_time,
+  cs.type AS usageType,
 
-        cs.network_id,
-        n.name AS networkName,
+  n.name AS networkName,
 
-        CONCAT(cu.first_name, ' ', cu.last_name) AS userName,
-        CASE
-          WHEN cu.name_type = 'IS_VANGUARD' THEN 'CPO'
-          ELSE 'EV Owner'
-        END AS addedByType,
+  CONCAT(cu.first_name, ' ', cu.last_name) AS userName,
+  CASE
+    WHEN cu.name_type = 'IS_VANGUARD' THEN 'CPO'
+    ELSE 'EV Owner'
+  END AS addedByType,
 
-        ct.id AS charger_type_id,
-        ct.name AS chargerName,
-        ct.type AS chargerType,
-        ct.max_power AS powerRating,
+  ct.name AS chargerName,
+  ct.type AS chargerType,
+  ct.max_power AS powerRating,
 
-        c.no_of_connectors,
-        c.price_per_khw,
+  c.no_of_connectors,
+  c.price_per_khw,
 
-        lp.eVolts,
-        a.path AS photoPath
+  lp.eVolts,
 
-      FROM charging_station cs
-      LEFT JOIN network n ON n.id = cs.network_id
-      LEFT JOIN customer cu ON cu.id = cs.created_by
-      LEFT JOIN charging_point cp ON cp.station_id = cs.id
-      LEFT JOIN connector c ON c.charge_point_id = cp.id
-      LEFT JOIN charger_types ct ON ct.id = c.charger_type_id
+  a.path AS photoPath
 
-      LEFT JOIN (
-        SELECT
-          station_id,
-          SUM(points) AS eVolts
-        FROM loyalty_points
-        WHERE approved_status = 'APPROVED'
-        GROUP BY station_id
-      ) lp ON lp.station_id = cs.id
+FROM charging_station cs
+LEFT JOIN network n ON n.id = cs.network_id
+LEFT JOIN customer cu ON cu.id = cs.created_by
+LEFT JOIN charging_point cp ON cp.station_id = cs.id
+LEFT JOIN connector c ON c.charge_point_id = cp.id
+LEFT JOIN charger_types ct ON ct.id = c.charger_type_id
 
-      LEFT JOIN attachment a ON a.station_id = cs.id
+LEFT JOIN (
+  SELECT
+    station_id,
+    SUM(points) AS eVolts
+  FROM loyalty_points
+  WHERE approved_status = 'APPROVED'
+  GROUP BY station_id
+) lp ON lp.station_id = cs.id
 
-      ${whereSQL}
-      ORDER BY cs.created_at DESC
-      LIMIT ? OFFSET ?
+
+LEFT JOIN attachment a ON a.station_id = cs.id
+
+${whereSQL}
+ORDER BY cs.created_at DESC
+LIMIT ? OFFSET ?
       `,
       [...params, limit, offset]
     );
 
-    /* ---------- MERGE BY station.id ---------- */
+    /**
+     * =====================================================
+     * MERGE STRICTLY BY charging_station.id
+     * =====================================================
+     */
     const stationMap = new Map();
 
     for (const r of rows) {
@@ -114,10 +126,7 @@ router.get("/", async (req, res) => {
           stationNumber: `CS-${r.id}`,
           latitude: r.latitude,
           longitude: r.longitude,
-
-          networkId: r.network_id,
           networkName: r.networkName,
-
           userName: r.userName,
           addedByType: r.addedByType,
           contactNumber: r.contactNumber,
@@ -126,20 +135,14 @@ router.get("/", async (req, res) => {
             r.open_time && r.close_time
               ? `${r.open_time} - ${r.close_time}`
               : "-",
-
           status:
-            r.verified === 1
+            r.status === "APPROVED"
               ? "Approved"
-              : r.verified === 0 && r.status === "REJECTED"
+              : r.status === "REJECTED"
               ? "Rejected"
               : "Pending",
-
-          verified: r.verified,
-          reason: r.reason || null,
-
           submissionDate: r.submissionDate,
-          approvalDate: r.verified === 1 ? r.approvalDate : null,
-
+          approvalDate: r.status === "APPROVED" ? r.approvalDate : null,
           photos: [],
           connectorsMap: new Map(),
           eVolts: r.eVolts || 0
@@ -148,23 +151,24 @@ router.get("/", async (req, res) => {
 
       const station = stationMap.get(r.id);
 
-      /* Photos */
+      // Photos
       if (r.photoPath && !station.photos.includes(r.photoPath)) {
         station.photos.push(r.photoPath);
       }
 
-      /* Connectors */
+      // Connectors
       if (r.chargerName) {
-        const key = `${r.charger_type_id}|${r.chargerName}|${r.powerRating}|${r.price_per_khw}`;
+        const key = `${r.chargerType}|${r.chargerName}|${r.powerRating}|${r.price_per_khw}`;
 
         if (!station.connectorsMap.has(key)) {
           station.connectorsMap.set(key, {
-            chargerTypeId: r.charger_type_id,
             type: r.chargerType,
             name: r.chargerName,
             count: r.no_of_connectors || 0,
             powerRating: r.powerRating ? `${r.powerRating} kW` : "-",
-            tariff: r.price_per_khw ? `₹${r.price_per_khw}/kWh` : "-"
+            tariff: r.price_per_khw
+              ? `₹${r.price_per_khw}/kWh`
+              : "-"
           });
         } else {
           station.connectorsMap.get(key).count += r.no_of_connectors || 0;
@@ -172,12 +176,35 @@ router.get("/", async (req, res) => {
       }
     }
 
+    /**
+     * =====================================================
+     * FINAL RESPONSE
+     * =====================================================
+     */
     const data = Array.from(stationMap.values()).map(s => ({
-      ...s,
-      connectors: Array.from(s.connectorsMap.values())
+      id: s.id,
+      stationName: s.stationName,
+      stationNumber: s.stationNumber,
+      latitude: s.latitude,
+      longitude: s.longitude,
+      networkName: s.networkName,
+      userName: s.userName,
+      addedByType: s.addedByType,
+      contactNumber: s.contactNumber,
+      usageType: s.usageType,
+      operationalHours: s.operationalHours,
+      status: s.status,
+      submissionDate: s.submissionDate,
+      approvalDate: s.approvalDate,
+      photos: s.photos,
+      connectors: Array.from(s.connectorsMap.values()),
+      eVolts: s.eVolts
     }));
 
-    res.json({ data, pagination: { total, page, limit } });
+    res.json({
+      data,
+      pagination: { total, page, limit }
+    });
 
   } catch (err) {
     console.error("GET /stations ERROR:", err);
@@ -187,173 +214,31 @@ router.get("/", async (req, res) => {
 
 /**
  * =====================================================
- * PUT /api/stations/:id   (FULL EDIT – UNCHANGED)
- * =====================================================
- */
-router.put("/:id", async (req, res) => {
-  const connection = await db.getConnection();
-
-  try {
-    const { id } = req.params;
-    const {
-      stationName,
-      network_id,
-      usageType,
-      open_time,
-      close_time,
-      latitude,
-      longitude,
-      contactNumber,
-      connectors
-    } = req.body;
-
-    await connection.beginTransaction();
-
-    await connection.query(
-      `
-      UPDATE charging_station
-      SET
-        name = ?,
-        network_id = ?,
-        type = ?,
-        open_time = ?,
-        close_time = ?,
-        latitude = ?,
-        longitude = ?,
-        mobile = ?,
-        updated_at = NOW()
-      WHERE id = ?
-      `,
-      [
-        stationName,
-        network_id,
-        usageType,
-        open_time,
-        close_time,
-        latitude,
-        longitude,
-        contactNumber,
-        id
-      ]
-    );
-
-    const [[cp]] = await connection.query(
-      `SELECT id FROM charging_point WHERE station_id = ? LIMIT 1`,
-      [id]
-    );
-
-    let chargePointId = cp?.id;
-
-    if (!chargePointId) {
-      const [insert] = await connection.query(
-        `INSERT INTO charging_point (station_id, status) VALUES (?, 1)`,
-        [id]
-      );
-      chargePointId = insert.insertId;
-    }
-
-    await connection.query(
-      `DELETE FROM connector WHERE charge_point_id = ?`,
-      [chargePointId]
-    );
-
-    for (const c of connectors) {
-      await connection.query(
-        `
-        INSERT INTO connector (
-          charge_point_id,
-          charger_type_id,
-          no_of_connectors,
-          power,
-          price_per_khw,
-          status,
-          created_at
-        )
-        VALUES (?, ?, ?, ?, ?, 1, NOW())
-        `,
-        [
-          chargePointId,
-          c.chargerTypeId,
-          c.count,
-          parseFloat(c.powerRating) || null,
-          parseFloat(String(c.tariff).replace(/[^\d.]/g, "")) || null
-        ]
-      );
-    }
-
-    await connection.commit();
-    res.json({ message: "Station updated successfully" });
-
-  } catch (err) {
-    await connection.rollback();
-    console.error("PUT /stations/:id ERROR:", err);
-    res.status(500).json({ message: err.message });
-  } finally {
-    connection.release();
-  }
-});
-
-/**
- * =====================================================
  * PUT /api/stations/:id/status
- * (APPROVE / REJECT USING verified COLUMN)
  * =====================================================
  */
 router.put("/:id/status", async (req, res) => {
-  const connection = await db.getConnection();
-
   try {
     const { id } = req.params;
-    const { status, reason } = req.body;
+    const { status } = req.body;
 
     if (!["Approved", "Rejected"].includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    const verifiedValue = status === "Approved" ? 1 : 0;
-    const approvedStatusValue = status === "Approved" ? "APPROVED" : "REJECTED";
-
-    await connection.beginTransaction();
-
-    /* Update charging_station */
-    await connection.query(
+    await db.query(
       `
       UPDATE charging_station
-      SET
-        verified = ?,
-        approved_status = ?,
-        reason = ?,
-        updated_at = NOW()
+      SET approved_status = ?, updated_at = NOW()
       WHERE id = ?
       `,
-      [
-        verifiedValue,
-        approvedStatusValue,
-        status === "Rejected" ? reason || null : null,
-        id
-      ]
+      [status.toUpperCase(), id]
     );
-
-    /* Sync loyalty_points */
-    await connection.query(
-      `
-      UPDATE loyalty_points
-      SET approved_status = ?
-      WHERE station_id = ?
-      `,
-      [approvedStatusValue, id]
-    );
-
-    await connection.commit();
 
     res.json({ message: `Station ${status} successfully` });
-
   } catch (err) {
-    await connection.rollback();
     console.error("PUT /stations/:id/status ERROR:", err);
     res.status(500).json({ message: err.message });
-  } finally {
-    connection.release();
   }
 });
 
