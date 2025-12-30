@@ -1,227 +1,3 @@
-// import express from "express";
-// import { db } from "../../db.js";
-// import { getPagination } from "../../utils/pagination.js";
-
-// const router = express.Router();
-
-// /**
-//  * =====================================================
-//  * GET /api/trips
-//  * =====================================================
-//  */
-// router.get("/", async (req, res) => {
-//   try {
-//     const { page, limit, offset } = getPagination(req.query);
-//     const { status, story } = req.query;
-
-//     const where = [];
-//     const params = [];
-
-//     if (status && status !== "All") {
-//       where.push("t.trip_status = ?");
-//       params.push(status);
-//     }
-
-//     if (story === "With Story") {
-//       where.push("t.feedback IS NOT NULL");
-//     } else if (story === "Without Story") {
-//       where.push("t.feedback IS NULL");
-//     }
-
-//     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
-
-//     /* ---------- TOTAL COUNT ---------- */
-//     const [[{ total }]] = await db.query(
-//       `SELECT COUNT(*) AS total FROM trip t ${whereSQL}`,
-//       params
-//     );
-
-//     /* ---------- MAIN QUERY ---------- */
-//     const [rows] = await db.query(
-//       `
-//       SELECT
-//         t.id,
-//         t.created_at,
-//         t.updated_at,
-//         t.trip_status,
-//         t.distance,
-//         t.feedback,
-//         t.source,
-//         t.destination,
-//         t.no_of_charging_stations,
-//         t.connector_id,
-
-//         c.first_name,
-//         c.last_name,
-//         c.email,
-//         c.mobile
-
-//       FROM trip t
-//       JOIN customer c ON c.id = t.customer_id
-//       ${whereSQL}
-//       ORDER BY t.created_at DESC
-//       LIMIT ? OFFSET ?
-//       `,
-//       [...params, limit, offset]
-//     );
-
-//     /* ---------- STOPS (trip_id based, with stop text + lat/lng) ---------- */
-//     const tripIds = rows.map(r => r.id);
-//     const stopsMap = {};
-
-//     if (tripIds.length > 0) {
-//       const [stops] = await db.query(
-//         `
-//         SELECT
-//           trip_id,
-//           stop,
-//           latitude,
-//           longitude
-//         FROM trip_stops
-//         WHERE trip_id IN (?)
-//         ORDER BY id ASC
-//         `,
-//         [tripIds]
-//       );
-
-//       for (const s of stops) {
-//         if (!stopsMap[s.trip_id]) stopsMap[s.trip_id] = [];
-//         stopsMap[s.trip_id].push({
-//           address: s.stop,
-//           lat: s.latitude,
-//           lng: s.longitude
-//         });
-//       }
-//     }
-
-//     /* ---------- FINAL RESPONSE ---------- */
-//     const data = rows.map(r => {
-//       let navigation = "No";
-//       let checkIn = "No";
-
-//       if (r.trip_status === "COMPLETED") {
-//         navigation = "Yes";
-//         checkIn = "Yes";
-//       } else if (r.trip_status === "ENQUIRED") {
-//         navigation = "Yes";
-//         checkIn = "No";
-//       } else if (r.trip_status === "SAVED") {
-//         navigation = "No";
-//         checkIn = "Yes";
-//       }
-
-
-//       let tripCompletionStatus = null;
-//       if (r.trip_status === "completed") tripCompletionStatus = "Successful";
-//       if (r.trip_status === "cancelled") tripCompletionStatus = "Failed";
-
-//       const tripStops = stopsMap[r.id] || [];
-//       const connectorCount = r.connector_id
-//         ? r.connector_id.split(",").filter(Boolean).length
-//         : 0;
-
-
-//       return {
-//         id: r.id,
-//         dateTime: r.created_at,
-
-//         firstName: r.first_name,
-//         lastName: r.last_name,
-//         email: r.email,
-//         mobileNumber: r.mobile,
-
-//         source: r.source,
-//         stop1: tripStops[0] || null,
-//         stop2: tripStops[1] || null,
-//         stop3: tripStops[2] || null,
-//         destination: r.destination,
-
-//         totalKm: r.distance,
-
-//         stationConnectorCount: `${r.no_of_charging_stations || 0} stations, ${connectorCount} connectors`,
-//         // stationConnectorCount: `${r.no_of_charging_stations || 0} stations, ${r.connector_id ? 1 : 0} connectors`,
-//         chargingStopsCount: r.no_of_charging_stations || 0,
-
-//         evModel: "-",
-//         evVariant: "-",
-//         evBatteryCapacity: "-",
-
-//         evolts: (r.no_of_charging_stations || 0) * 2,
-
-//         feedback: r.feedback || null,
-
-//         navigation,
-//         checkIn,
-
-//         tripStatus: r.trip_status,
-//         tripCompletionStatus,
-
-//         hasTripStory: r.feedback ? "Yes" : "No",
-//         storyStatus: null,
-
-//         approvalDate: r.updated_at,
-//         approvedBy: null
-//       };
-//     });
-
-//     res.json({
-//       data,
-//       pagination: { total, page, limit }
-//     });
-
-//   } catch (err) {
-//     console.error("GET /trips ERROR:", err);
-//     res.status(500).json({ message: err.message });
-//   }
-// });
-
-// /**
-//  * =====================================================
-//  * PUT /api/trips/:id/story
-//  * =====================================================
-//  */
-// router.put("/:id/story", async (req, res) => {
-//   try {
-//     const { id } = req.params;
-//     const { action } = req.body;
-
-//     if (!["Approved", "Rejected"].includes(action)) {
-//       return res.status(400).json({ message: "Invalid action" });
-//     }
-
-//     if (action === "Rejected") {
-//       await db.query(
-//         `
-//         UPDATE trip
-//         SET feedback = NULL,
-//             updated_at = NOW()
-//         WHERE id = ?
-//         `,
-//         [id]
-//       );
-//     }
-
-//     if (action === "Approved") {
-//       await db.query(
-//         `
-//         UPDATE trip
-//         SET updated_at = NOW()
-//         WHERE id = ? AND feedback IS NOT NULL
-//         `,
-//         [id]
-//       );
-//     }
-
-//     res.json({ message: `Trip story ${action.toLowerCase()} successfully` });
-
-//   } catch (err) {
-//     console.error("PUT /trips/:id/story ERROR:", err);
-//     res.status(500).json({ message: err.message });
-//   }
-// });
-
-// export default router;
-
 import express from "express";
 import { db } from "../../db.js";
 import { getPagination } from "../../utils/pagination.js";
@@ -230,170 +6,201 @@ const router = express.Router();
 
 /**
  * =====================================================
- * GET /api/trips
+ * GET /api/stations
  * =====================================================
  */
 router.get("/", async (req, res) => {
   try {
     const { page, limit, offset } = getPagination(req.query);
-    const { status, story } = req.query;
+    const { status, startDate, endDate } = req.query;
 
     const where = [];
     const params = [];
 
     if (status && status !== "All") {
-      where.push("t.trip_status = ?");
-      params.push(status);
+      where.push("cs.approved_status = ?");
+      params.push(status.toUpperCase());
     }
 
-    if (story === "With Story") {
-      where.push("t.feedback IS NOT NULL");
-    } else if (story === "Without Story") {
-      where.push("t.feedback IS NULL");
+    if (startDate) {
+      where.push("cs.created_at >= ?");
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      where.push("cs.created_at <= ?");
+      params.push(endDate);
     }
 
     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    /* ---------- TOTAL COUNT ---------- */
+    /* ======================
+       TOTAL COUNT
+    ====================== */
     const [[{ total }]] = await db.query(
-      `SELECT COUNT(*) AS total FROM trip t ${whereSQL}`,
+      `
+      SELECT COUNT(DISTINCT cs.id) AS total
+      FROM charging_station cs
+      ${whereSQL}
+      `,
       params
     );
 
-    /* ---------- MAIN QUERY ---------- */
+    /* ======================
+       MAIN QUERY
+    ====================== */
     const [rows] = await db.query(
       `
       SELECT
-        t.id,
-        t.created_at,
-        t.updated_at,
-        t.trip_status,
-        t.distance,
-        t.feedback,
-        t.source,
-        t.destination,
-        t.no_of_charging_stations,
-        t.connector_id,
+        cs.id,
+        cs.name AS stationName,
+        cs.latitude,
+        cs.longitude,
+        cs.mobile AS contactNumber,
+        cs.created_at AS submissionDate,
+        cs.updated_at AS approvalDate,
+        cs.approved_status AS status,
+        cs.open_time,
+        cs.close_time,
+        cs.type AS usageType,
 
-        t.battery_capacity,
+        cs.network_id,                 -- ✅ ADDED
+        n.name AS networkName,
 
-        vm.name AS vehicle_model_name,
-        vv.name AS vehicle_variant_name,
+        CONCAT(cu.first_name, ' ', cu.last_name) AS userName,
+        CASE
+          WHEN cu.name_type = 'IS_VANGUARD' THEN 'CPO'
+          ELSE 'EV Owner'
+        END AS addedByType,
 
-        c.first_name,
-        c.last_name,
-        c.email,
-        c.mobile
+        ct.id AS charger_type_id,       -- ✅ ADDED
+        ct.name AS chargerName,
+        ct.type AS chargerType,
+        ct.max_power AS powerRating,
 
-      FROM trip t
-      JOIN customer c ON c.id = t.customer_id
+        c.no_of_connectors,
+        c.price_per_khw,
 
-      LEFT JOIN my_vehicles mv ON mv.id = t.vehicle_id
-      LEFT JOIN vehicle_model_master vm ON vm.id = mv.vehicle_model_id
-      LEFT JOIN vehicle_variant_master vv ON vv.id = mv.vehicle_variant_id
+        lp.eVolts,
+        a.path AS photoPath
+
+      FROM charging_station cs
+      LEFT JOIN network n ON n.id = cs.network_id
+      LEFT JOIN customer cu ON cu.id = cs.created_by
+      LEFT JOIN charging_point cp ON cp.station_id = cs.id
+      LEFT JOIN connector c ON c.charge_point_id = cp.id
+      LEFT JOIN charger_types ct ON ct.id = c.charger_type_id
+
+      LEFT JOIN (
+        SELECT
+          station_id,
+          SUM(points) AS eVolts
+        FROM loyalty_points
+        WHERE approved_status = 'APPROVED'
+        GROUP BY station_id
+      ) lp ON lp.station_id = cs.id
+
+      LEFT JOIN attachment a ON a.station_id = cs.id
 
       ${whereSQL}
-      ORDER BY t.created_at DESC
+      ORDER BY cs.created_at DESC
       LIMIT ? OFFSET ?
       `,
       [...params, limit, offset]
     );
 
-    /* ---------- STOPS (trip_id based) ---------- */
-    const tripIds = rows.map(r => r.id);
-    const stopsMap = {};
+    /* ======================
+       MERGE BY station.id
+    ====================== */
+    const stationMap = new Map();
 
-    if (tripIds.length > 0) {
-      const [stops] = await db.query(
-        `
-        SELECT
-          trip_id,
-          stop,
-          latitude,
-          longitude
-        FROM trip_stops
-        WHERE trip_id IN (?)
-        ORDER BY id ASC
-        `,
-        [tripIds]
-      );
+    for (const r of rows) {
+      if (!stationMap.has(r.id)) {
+        stationMap.set(r.id, {
+          id: r.id,
+          stationName: r.stationName,
+          stationNumber: `CS-${r.id}`,
+          latitude: r.latitude,
+          longitude: r.longitude,
 
-      for (const s of stops) {
-        if (!stopsMap[s.trip_id]) stopsMap[s.trip_id] = [];
-        stopsMap[s.trip_id].push({
-          address: s.stop,
-          lat: s.latitude,
-          lng: s.longitude
+          networkId: r.network_id,   // ✅ SENT
+          networkName: r.networkName,
+
+          userName: r.userName,
+          addedByType: r.addedByType,
+          contactNumber: r.contactNumber,
+          usageType: r.usageType === "PUBLIC" ? "Public" : "Private",
+          operationalHours:
+            r.open_time && r.close_time
+              ? `${r.open_time} - ${r.close_time}`
+              : "-",
+          status:
+            r.status === "APPROVED"
+              ? "Approved"
+              : r.status === "REJECTED"
+              ? "Rejected"
+              : "Pending",
+          submissionDate: r.submissionDate,
+          approvalDate: r.status === "APPROVED" ? r.approvalDate : null,
+          photos: [],
+          connectorsMap: new Map(),
+          eVolts: r.eVolts || 0
         });
+      }
+
+      const station = stationMap.get(r.id);
+
+      /* Photos */
+      if (r.photoPath && !station.photos.includes(r.photoPath)) {
+        station.photos.push(r.photoPath);
+      }
+
+      /* Connectors */
+      if (r.chargerName) {
+        const key = `${r.charger_type_id}|${r.chargerName}|${r.powerRating}|${r.price_per_khw}`;
+
+        if (!station.connectorsMap.has(key)) {
+          station.connectorsMap.set(key, {
+            chargerTypeId: r.charger_type_id,  // ✅ SENT
+            type: r.chargerType,
+            name: r.chargerName,
+            count: r.no_of_connectors || 0,
+            powerRating: r.powerRating ? `${r.powerRating} kW` : "-",
+            tariff: r.price_per_khw
+              ? `₹${r.price_per_khw}/kWh`
+              : "-"
+          });
+        } else {
+          station.connectorsMap.get(key).count += r.no_of_connectors || 0;
+        }
       }
     }
 
-    /* ---------- FINAL RESPONSE ---------- */
-    const data = rows.map(r => {
-      let navigation = "No";
-      let checkIn = "No";
+    /* ======================
+       FINAL RESPONSE
+    ====================== */
+    const data = Array.from(stationMap.values()).map(s => ({
+      id: s.id,
+      stationName: s.stationName,
+      stationNumber: s.stationNumber,
+      latitude: s.latitude,
+      longitude: s.longitude,
 
-      if (r.trip_status === "COMPLETED") {
-        navigation = "Yes";
-        checkIn = "Yes";
-      } else if (r.trip_status === "ENQUIRED") {
-        navigation = "Yes";
-        checkIn = "No";
-      } else if (r.trip_status === "SAVED") {
-        navigation = "No";
-        checkIn = "Yes";
-      }
+      networkId: s.networkId,   // ✅ FRONTEND GETS THIS
+      networkName: s.networkName,
 
-      let tripCompletionStatus = null;
-      if (r.trip_status === "completed") tripCompletionStatus = "Successful";
-      if (r.trip_status === "cancelled") tripCompletionStatus = "Failed";
-
-      const tripStops = stopsMap[r.id] || [];
-      const connectorCount = r.connector_id
-        ? r.connector_id.split(",").filter(Boolean).length
-        : 0;
-
-      return {
-        id: r.id,
-        dateTime: r.created_at,
-
-        firstName: r.first_name,
-        lastName: r.last_name,
-        email: r.email,
-        mobileNumber: r.mobile,
-
-        source: r.source,
-        stop1: tripStops[0] || null,
-        stop2: tripStops[1] || null,
-        stop3: tripStops[2] || null,
-        destination: r.destination,
-
-        totalKm: r.distance,
-
-        stationConnectorCount: `${r.no_of_charging_stations || 0} stations, ${connectorCount} connectors`,
-        chargingStopsCount: r.no_of_charging_stations || 0,
-
-        evModel: r.vehicle_model_name || "-",
-        evVariant: r.vehicle_variant_name || "-",
-        evBatteryCapacity: r.battery_capacity || "-",
-
-        evolts: (r.no_of_charging_stations || 0) * 2,
-
-        feedback: r.feedback || null,
-
-        navigation,
-        checkIn,
-
-        tripStatus: r.trip_status,
-        tripCompletionStatus,
-
-        hasTripStory: r.feedback ? "Yes" : "No",
-        storyStatus: null,
-
-        approvalDate: r.updated_at,
-        approvedBy: null
-      };
-    });
+      userName: s.userName,
+      addedByType: s.addedByType,
+      contactNumber: s.contactNumber,
+      usageType: s.usageType,
+      operationalHours: s.operationalHours,
+      status: s.status,
+      submissionDate: s.submissionDate,
+      approvalDate: s.approvalDate,
+      photos: s.photos,
+      connectors: Array.from(s.connectorsMap.values()),
+      eVolts: s.eVolts
+    }));
 
     res.json({
       data,
@@ -401,52 +208,37 @@ router.get("/", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("GET /trips ERROR:", err);
+    console.error("GET /stations ERROR:", err);
     res.status(500).json({ message: err.message });
   }
 });
 
 /**
  * =====================================================
- * PUT /api/trips/:id/story
+ * PUT /api/stations/:id/status
  * =====================================================
  */
-router.put("/:id/story", async (req, res) => {
+router.put("/:id/status", async (req, res) => {
   try {
     const { id } = req.params;
-    const { action } = req.body;
+    const { status } = req.body;
 
-    if (!["Approved", "Rejected"].includes(action)) {
-      return res.status(400).json({ message: "Invalid action" });
+    if (!["Approved", "Rejected"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
     }
 
-    if (action === "Rejected") {
-      await db.query(
-        `
-        UPDATE trip
-        SET feedback = NULL,
-            updated_at = NOW()
-        WHERE id = ?
-        `,
-        [id]
-      );
-    }
+    await db.query(
+      `
+      UPDATE charging_station
+      SET approved_status = ?, updated_at = NOW()
+      WHERE id = ?
+      `,
+      [status.toUpperCase(), id]
+    );
 
-    if (action === "Approved") {
-      await db.query(
-        `
-        UPDATE trip
-        SET updated_at = NOW()
-        WHERE id = ? AND feedback IS NOT NULL
-        `,
-        [id]
-      );
-    }
-
-    res.json({ message: `Trip story ${action.toLowerCase()} successfully` });
-
+    res.json({ message: `Station ${status} successfully` });
   } catch (err) {
-    console.error("PUT /trips/:id/story ERROR:", err);
+    console.error("PUT /stations/:id/status ERROR:", err);
     res.status(500).json({ message: err.message });
   }
 });
