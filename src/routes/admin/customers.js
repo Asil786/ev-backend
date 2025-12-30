@@ -35,12 +35,15 @@ router.get("/", async (req, res) => {
         d.type AS device_platform,
         d.version_number AS app_version,
 
+        /* ---------- NAVIGATION ---------- */
         EXISTS (
           SELECT 1
           FROM trip t
           WHERE t.customer_id = c.id
+            AND t.trip_status IN ('COMPLETED', 'ON_GOING', 'ON_GOING_TEST')
         ) AS has_navigation,
 
+        /* ---------- TRIP (ANY ACTIVE / USED TRIP) ---------- */
         EXISTS (
           SELECT 1
           FROM trip t
@@ -48,11 +51,12 @@ router.get("/", async (req, res) => {
             AND t.trip_status != 'ENQUIRED'
         ) AS has_trip,
 
+        /* ---------- CHECK-IN ---------- */
         EXISTS (
           SELECT 1
-          FROM trip_stops ts
-          JOIN trip t2 ON t2.id = ts.trip_id
-          WHERE t2.customer_id = c.id
+          FROM trip t
+          WHERE t.customer_id = c.id
+            AND t.trip_status IN ('COMPLETED', 'ON_GOING', 'ON_GOING_TEST')
         ) AS has_checkin
 
       FROM customer c
@@ -97,29 +101,35 @@ router.get("/", async (req, res) => {
       customerRegDate: r.customer_reg_date,
       vehicleRegDate: r.vehicle_reg_date,
       registrationNumber: r.vehicle_registration_no,
+
       subscription:
         r.has_trip && r.has_checkin
           ? "Premium"
           : r.has_trip
           ? "Gold"
           : "Basic",
+
       vehicleType: r.vehicle_type,
       manufacturer: r.manufacturer,
       vehicleModel: r.vehicle_model,
       vehicleVariant: r.vehicle_variant,
+
       deviceBrand: r.device_brand,
       deviceModel: r.device_model,
       devicePlatform: r.device_platform,
       appVersion: r.app_version,
-      navigation: !!r.has_navigation,
-      trip: !!r.has_trip,
-      checkIn: !!r.has_checkin
+
+      /* ---------- DASHBOARD FLAGS ---------- */
+      navigation: r.has_navigation ? "Yes" : "No",
+      trip: r.has_trip ? "Yes" : "No",
+      checkIn: r.has_checkin ? "Yes" : "No"
     }));
 
     res.json({
       data,
       pagination: { total, page, limit }
     });
+
   } catch (err) {
     console.error("CUSTOMERS API ERROR:", err);
     res.status(500).json({ message: err.message });
