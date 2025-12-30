@@ -71,7 +71,6 @@ router.get("/", async (req, res) => {
       LEFT JOIN vehicle_model_master vm ON vm.id = mv.vehicle_model_id
       LEFT JOIN vehicle_variant_master vv ON vv.id = mv.vehicle_variant_id
 
-      /* ---- EVOLTS FROM LOYALTY POINTS (APPROVED ONLY) ---- */
       LEFT JOIN (
         SELECT
           customer_id,
@@ -119,7 +118,7 @@ router.get("/", async (req, res) => {
 
     /* ---------- FINAL RESPONSE ---------- */
     const data = rows.map(r => {
-      /* ---- Navigation & Check-in (Dashboard View) ---- */
+      /* ---- Navigation & Check-in ---- */
       let navigation = "No";
       let checkIn = "No";
 
@@ -132,12 +131,10 @@ router.get("/", async (req, res) => {
         checkIn = "Yes";
       }
 
-      /* ---- Trip Completion Status (FROM t.status) ---- */
-      let tripCompletionStatus = null;
-      if (r.trip_status_flag === 1) {
+      /* ---- UPDATED TRIP COMPLETION LOGIC ---- */
+      let tripCompletionStatus = "Failed";
+      if (r.trip_status_flag === 1 && r.trip_status === "COMPLETED") {
         tripCompletionStatus = "Successful";
-      } else if (r.trip_status_flag === 0) {
-        tripCompletionStatus = "Failed";
       }
 
       const tripStops = stopsMap[r.id] || [];
@@ -170,7 +167,6 @@ router.get("/", async (req, res) => {
         evBatteryCapacity: r.battery_capacity || "-",
 
         evolts: r.evolts || 0,
-
         feedback: r.feedback || null,
 
         navigation,
@@ -194,51 +190,6 @@ router.get("/", async (req, res) => {
 
   } catch (err) {
     console.error("GET /trips ERROR:", err);
-    res.status(500).json({ message: err.message });
-  }
-});
-
-/**
- * =====================================================
- * PUT /api/trips/:id/story
- * =====================================================
- */
-router.put("/:id/story", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { action } = req.body;
-
-    if (!["Approved", "Rejected"].includes(action)) {
-      return res.status(400).json({ message: "Invalid action" });
-    }
-
-    if (action === "Rejected") {
-      await db.query(
-        `
-        UPDATE trip
-        SET feedback = NULL,
-            updated_at = NOW()
-        WHERE id = ?
-        `,
-        [id]
-      );
-    }
-
-    if (action === "Approved") {
-      await db.query(
-        `
-        UPDATE trip
-        SET updated_at = NOW()
-        WHERE id = ? AND feedback IS NOT NULL
-        `,
-        [id]
-      );
-    }
-
-    res.json({ message: `Trip story ${action.toLowerCase()} successfully` });
-
-  } catch (err) {
-    console.error("PUT /trips/:id/story ERROR:", err);
     res.status(500).json({ message: err.message });
   }
 });
