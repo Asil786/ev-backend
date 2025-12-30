@@ -34,17 +34,11 @@ router.get("/", async (req, res) => {
 
     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    /* ---------- TOTAL COUNT ---------- */
     const [[{ total }]] = await db.query(
-      `
-      SELECT COUNT(DISTINCT cs.id) AS total
-      FROM charging_station cs
-      ${whereSQL}
-      `,
+      `SELECT COUNT(DISTINCT cs.id) AS total FROM charging_station cs ${whereSQL}`,
       params
     );
 
-    /* ---------- MAIN QUERY ---------- */
     const [rows] = await db.query(
       `
       SELECT
@@ -95,7 +89,6 @@ router.get("/", async (req, res) => {
       ) lp ON lp.station_id = cs.id
 
       LEFT JOIN attachment a ON a.station_id = cs.id
-
       ${whereSQL}
       ORDER BY cs.created_at DESC
       LIMIT ? OFFSET ?
@@ -103,7 +96,6 @@ router.get("/", async (req, res) => {
       [...params, limit, offset]
     );
 
-    /* ---------- MERGE BY station.id ---------- */
     const stationMap = new Map();
 
     for (const r of rows) {
@@ -154,9 +146,7 @@ router.get("/", async (req, res) => {
             name: r.chargerName,
             count: r.no_of_connectors || 0,
             powerRating: r.powerRating ? `${r.powerRating} kW` : "-",
-            tariff: r.price_per_khw
-              ? `₹${r.price_per_khw}/kWh`
-              : "-"
+            tariff: r.price_per_khw ? `₹${r.price_per_khw}/kWh` : "-"
           });
         } else {
           station.connectorsMap.get(key).count += r.no_of_connectors || 0;
@@ -164,29 +154,13 @@ router.get("/", async (req, res) => {
       }
     }
 
-    /* ---------- FINAL RESPONSE ---------- */
     const data = Array.from(stationMap.values()).map(s => ({
-      id: s.id,
-      stationName: s.stationName,
-      stationNumber: s.stationNumber,
-      latitude: s.latitude,
-      longitude: s.longitude,
-      networkId: s.networkId,
-      networkName: s.networkName,
-      userName: s.userName,
-      addedByType: s.addedByType,
-      contactNumber: s.contactNumber,
-      usageType: s.usageType,
-      operationalHours: s.operationalHours,
-      status: s.status,
-      submissionDate: s.submissionDate,
-      approvalDate: s.approvalDate,
-      photos: s.photos,
-      connectors: Array.from(s.connectorsMap.values()),
-      eVolts: s.eVolts
+      ...s,
+      connectors: Array.from(s.connectorsMap.values())
     }));
 
     res.json({ data, pagination: { total, page, limit } });
+
   } catch (err) {
     console.error("GET /stations ERROR:", err);
     res.status(500).json({ message: err.message });
@@ -195,10 +169,10 @@ router.get("/", async (req, res) => {
 
 /**
  * =====================================================
- * PUT /api/stations/:id
+ * PUT /api/stations/:id   (FULL UPDATE)
  * =====================================================
  */
-router.put("stations/:id", async (req, res) => {
+router.put("/:id", async (req, res) => {
   const connection = await db.getConnection();
   try {
     const { id } = req.params;
@@ -219,9 +193,17 @@ router.put("stations/:id", async (req, res) => {
     await connection.query(
       `
       UPDATE charging_station
-      SET name=?, network_id=?, type=?, open_time=?, close_time=?,
-          latitude=?, longitude=?, mobile=?, updated_at=NOW()
-      WHERE id=?
+      SET
+        name = ?,
+        network_id = ?,
+        type = ?,
+        open_time = ?,
+        close_time = ?,
+        latitude = ?,
+        longitude = ?,
+        mobile = ?,
+        updated_at = NOW()
+      WHERE id = ?
       `,
       [
         stationName,
@@ -237,21 +219,21 @@ router.put("stations/:id", async (req, res) => {
     );
 
     const [[cp]] = await connection.query(
-      `SELECT id FROM charging_point WHERE station_id=? LIMIT 1`,
+      `SELECT id FROM charging_point WHERE station_id = ? LIMIT 1`,
       [id]
     );
 
     let chargePointId = cp?.id;
     if (!chargePointId) {
-      const [r] = await connection.query(
-        `INSERT INTO charging_point (station_id, status) VALUES (?,1)`,
+      const [cpInsert] = await connection.query(
+        `INSERT INTO charging_point (station_id, status) VALUES (?, 1)`,
         [id]
       );
-      chargePointId = r.insertId;
+      chargePointId = cpInsert.insertId;
     }
 
     await connection.query(
-      `DELETE FROM connector WHERE charge_point_id=?`,
+      `DELETE FROM connector WHERE charge_point_id = ?`,
       [chargePointId]
     );
 
@@ -274,19 +256,46 @@ router.put("stations/:id", async (req, res) => {
           c.chargerTypeId,
           c.count,
           parseFloat(c.powerRating) || null,
-          parseFloat(c.tariff.replace(/[^\d.]/g, "")) || null
+          parseFloat(String(c.tariff).replace(/[^\d.]/g, "")) || null
         ]
       );
     }
 
     await connection.commit();
     res.json({ message: "Station updated successfully" });
+
   } catch (err) {
     await connection.rollback();
     console.error("PUT /stations/:id ERROR:", err);
     res.status(500).json({ message: err.message });
   } finally {
     connection.release();
+  }
+});
+
+/**
+ * =====================================================
+ * PUT /api/stations/:id/status   ✅ FRONTEND SAFE
+ * =====================================================
+ */
+router.put("/:id/status", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    await db.query(
+      `
+      UPDATE charging_station
+      SET approved_status = ?, updated_at = NOW()
+      WHERE id = ?
+      `,
+      [status.toUpperCase(), id]
+    );
+
+    res.json({ message: "Status updated successfully" });
+  } catch (err) {
+    console.error("PUT /stations/:id/status ERROR:", err);
+    res.status(500).json({ message: err.message });
   }
 });
 
