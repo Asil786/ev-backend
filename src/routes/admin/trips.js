@@ -411,44 +411,132 @@ router.get("/", async (req, res) => {
  * PUT /api/trips/:id/story
  * =====================================================
  */
-router.put("/:id/story", async (req, res) => {
+router.put("/:id", async (req, res) => {
+  const connection = await db.getConnection();
   try {
     const { id } = req.params;
-    const { action } = req.body;
+    const {
+      stationName,
+      network_id,
+      usageType,
+      open_time,
+      close_time,
+      latitude,
+      longitude,
+      contactNumber,
+      connectors
+    } = req.body;
 
-    if (!["Approved", "Rejected"].includes(action)) {
-      return res.status(400).json({ message: "Invalid action" });
-    }
+    await connection.beginTransaction();
 
-    if (action === "Rejected") {
-      await db.query(
+    /**
+     * =========================
+     * UPDATE charging_station
+     * =========================
+     */
+    await connection.query(
+      `
+      UPDATE charging_station
+      SET
+        name = ?,
+        network_id = ?,
+        type = ?,
+        open_time = ?,
+        close_time = ?,
+        latitude = ?,
+        longitude = ?,
+        mobile = ?,
+        updated_at = NOW()
+      WHERE id = ?
+      `,
+      [
+        stationName,
+        network_id,
+        usageType,
+        open_time,
+        close_time,
+        latitude,
+        longitude,
+        contactNumber,
+        id
+      ]
+    );
+
+    /**
+     * =========================
+     * GET charging_point.id
+     * (1 station → 1 CP as per your current logic)
+     * =========================
+     */
+    const [[cp]] = await connection.query(
+      `SELECT id FROM charging_point WHERE station_id = ? LIMIT 1`,
+      [id]
+    );
+
+    let chargePointId = cp?.id;
+
+    if (!chargePointId) {
+      const [cpInsert] = await connection.query(
         `
-        UPDATE trip
-        SET feedback = NULL,
-            updated_at = NOW()
-        WHERE id = ?
+        INSERT INTO charging_point (station_id, status)
+        VALUES (?, 1)
         `,
         [id]
       );
+      chargePointId = cpInsert.insertId;
     }
 
-    if (action === "Approved") {
-      await db.query(
+    /**
+     * =========================
+     * DELETE OLD CONNECTORS
+     * (UI sends fresh list)
+     * =========================
+     */
+    await connection.query(
+      `DELETE FROM connector WHERE charge_point_id = ?`,
+      [chargePointId]
+    );
+
+    /**
+     * =========================
+     * INSERT NEW CONNECTORS
+     * (multiple connectors)
+     * =========================
+     */
+    for (const c of connectors) {
+      await connection.query(
         `
-        UPDATE trip
-        SET updated_at = NOW()
-        WHERE id = ? AND feedback IS NOT NULL
+        INSERT INTO connector (
+          charge_point_id,
+          charger_type_id,
+          no_of_connectors,
+          power,
+          price_per_khw,
+          status,
+          created_at
+        )
+        VALUES (?, ?, ?, ?, ?, 1, NOW())
         `,
-        [id]
+        [
+          chargePointId,
+          c.charger_type_id,
+          c.count,
+          c.power,
+          c.tariff
+        ]
       );
     }
 
-    res.json({ message: `Trip story ${action.toLowerCase()} successfully` });
+    await connection.commit();
+
+    res.json({ message: "Station updated successfully" });
 
   } catch (err) {
-    console.error("PUT /trips/:id/story ERROR:", err);
+    await connection.rollback();
+    console.error("PUT /stations/:id ERROR:", err);
     res.status(500).json({ message: err.message });
+  } finally {
+    connection.release();
   }
 });
-
 export default router;
