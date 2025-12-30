@@ -11,7 +11,6 @@ const router = express.Router();
  */
 router.get("/", async (req, res) => {
   try {
-    // Pagination (limit is fixed to 10 inside helper)
     const { page, limit, offset } = getPagination(req.query);
     const { status, startDate, endDate } = req.query;
 
@@ -36,9 +35,7 @@ router.get("/", async (req, res) => {
     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
     /**
-     * ======================
-     * TOTAL COUNT (STATIONS)
-     * ======================
+     * TOTAL COUNT
      */
     const [[{ total }]] = await db.query(
       `
@@ -50,9 +47,7 @@ router.get("/", async (req, res) => {
     );
 
     /**
-     * =====================================================
      * STEP 1: FETCH STATION IDS (PAGINATION SAFE)
-     * =====================================================
      */
     const [stationIdRows] = await db.query(
       `
@@ -67,24 +62,15 @@ router.get("/", async (req, res) => {
 
     const stationIds = stationIdRows.map(r => r.id);
 
-    // ✅ Edge case:
-    // - DB has less than 10 records
-    // - Page is out of range
     if (stationIds.length === 0) {
       return res.json({
         data: [],
-        pagination: {
-          total,
-          page,
-          limit
-        }
+        pagination: { total, page, limit }
       });
     }
 
     /**
-     * =====================================================
-     * STEP 2: FETCH FULL DATA FOR THOSE STATIONS
-     * =====================================================
+     * STEP 2: FETCH FULL DATA
      */
     const [rows] = await db.query(
       `
@@ -141,9 +127,7 @@ router.get("/", async (req, res) => {
     );
 
     /**
-     * =====================================================
-     * STEP 3: MERGE + DEDUP
-     * =====================================================
+     * MERGE + DEDUP
      */
     const stationMap = new Map();
 
@@ -180,12 +164,10 @@ router.get("/", async (req, res) => {
 
       const station = stationMap.get(r.id);
 
-      // PHOTO DEDUP
       if (r.photoPath && !station.photos.includes(r.photoPath)) {
         station.photos.push(r.photoPath);
       }
 
-      // CONNECTOR DEDUP (BY PRIMARY KEY)
       if (r.connectorId) {
         const exists = station.connectors.find(
           c => c.id === r.connectorId
@@ -198,9 +180,7 @@ router.get("/", async (req, res) => {
             type: r.chargerType,
             name: r.chargerName,
             count: r.no_of_connectors || 0,
-            powerRating: r.powerRating
-              ? `${r.powerRating} kW`
-              : "-",
+            powerRating: r.powerRating ? `${r.powerRating} kW` : "-",
             tariff: r.price_per_khw
               ? `₹${r.price_per_khw}/kWh`
               : "-"
@@ -209,18 +189,9 @@ router.get("/", async (req, res) => {
       }
     }
 
-    /**
-     * =====================================================
-     * FINAL RESPONSE
-     * =====================================================
-     */
     res.json({
       data: Array.from(stationMap.values()),
-      pagination: {
-        total,
-        page,
-        limit
-      }
+      pagination: { total, page, limit }
     });
 
   } catch (err) {
@@ -241,6 +212,7 @@ router.put("/:id", async (req, res) => {
     const { id } = req.params;
     const {
       action,
+      reason,
       stationName,
       latitude,
       longitude,
@@ -265,6 +237,7 @@ router.put("/:id", async (req, res) => {
         UPDATE charging_station
         SET verified = 1,
             approved_status = 'APPROVED',
+            reason = NULL,
             updated_at = NOW()
         WHERE id = ?
         `,
@@ -289,15 +262,21 @@ router.put("/:id", async (req, res) => {
      * REJECT
      */
     if (action === "REJECT") {
+      const rejectReason =
+        typeof reason === "string" && reason.trim()
+          ? reason.trim()
+          : null;
+
       await connection.query(
         `
         UPDATE charging_station
         SET verified = 0,
             approved_status = 'REJECTED',
+            reason = ?,
             updated_at = NOW()
         WHERE id = ?
         `,
-        [id]
+        [rejectReason, id]
       );
 
       await connection.query(
@@ -315,7 +294,7 @@ router.put("/:id", async (req, res) => {
     }
 
     /**
-     * SAVE CHANGES
+     * SAVE
      */
     if (action === "SAVE") {
       await connection.query(
@@ -355,13 +334,11 @@ router.put("/:id", async (req, res) => {
         chargePointId = insert.insertId;
       }
 
-      // DELETE ONLY CONNECTORS OF THIS STATION
       await connection.query(
         `DELETE FROM connector WHERE charge_point_id = ?`,
         [chargePointId]
       );
 
-      // INSERT FINAL CONNECTOR LIST
       for (const c of connectors) {
         await connection.query(
           `
