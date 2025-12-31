@@ -90,6 +90,8 @@ router.get("/", async (req, res) => {
 
         n.name AS networkName,
 
+        CONCAT(cu.first_name, ' ', cu.last_name) AS userName,
+
         c.id AS connectorId,
         ct.id AS chargerTypeId,
         ct.name AS chargerName,
