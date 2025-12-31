@@ -212,6 +212,7 @@ router.put("/:id", async (req, res) => {
       reason,
       addedByType,
       usageType,
+      LandMark,
       stationName,
       latitude,
       longitude,
@@ -300,6 +301,7 @@ router.put("/:id", async (req, res) => {
           `
           UPDATE charging_station
           SET name = ?,
+              landmark = ?,
               latitude = ?,
               type = ?,
               user_type = ?,
@@ -312,6 +314,7 @@ router.put("/:id", async (req, res) => {
           `,
           [
             stationName,
+            LandMark,
             latitude,
             usageType,
             addedByType,
