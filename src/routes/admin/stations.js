@@ -214,7 +214,7 @@ router.put("/:id", async (req, res) => {
       reason,
       addedByType,
       usageType,
-      StationType,
+      stationType,
       stationName,
       latitude,
       longitude,
@@ -316,7 +316,7 @@ router.put("/:id", async (req, res) => {
           `,
           [
             stationName,
-            StationType,
+            stationType,
             latitude,
             usageType,
             addedByType,
