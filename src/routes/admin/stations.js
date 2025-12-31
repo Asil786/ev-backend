@@ -328,7 +328,6 @@ router.put("/:id", async (req, res) => {
             contactNumber,
             open_time,
             close_time,
-
             networkId,
             networkName,
             networkStatus,
@@ -348,6 +347,7 @@ router.put("/:id", async (req, res) => {
                 UPDATE charging_station
                 SET name = ?,
                     latitude = ?,
+                    landmark = ?,
                     longitude = ?,
                     mobile = ?,
                     open_time = ?,
@@ -358,6 +358,7 @@ router.put("/:id", async (req, res) => {
             [
               stationName,
               latitude,
+              stationType,
               longitude,
               contactNumber,
               open_time,
@@ -365,69 +366,88 @@ router.put("/:id", async (req, res) => {
               id,
             ]
           );
+          /* ---------------- NETWORK LOGIC (FIXED) ---------------- */
 
-          /* ---------------- NETWORK LOGIC ---------------- */
           let finalNetworkId = null;
-          const netStatus = Number(networkStatus);
+          const normalizedNetworkStatus = Number(networkStatus);
 
-          if (netStatus === 1 && networkId) {
-            // ACTIVE → just ensure link
-            finalNetworkId = networkId;
-          }
-
-          if (netStatus === 0 && networkName) {
-            // Find all duplicate networks
-            const [networks] = await connection.query(
-              `
-                  SELECT id, created_at
-                  FROM network
-                  WHERE name = ?
-                  ORDER BY created_at ASC
-                  `,
-              [networkName]
+          /**
+           * CASE 1: Network already active
+           */
+          if (normalizedNetworkStatus === 1 && networkId) {
+            // verify network exists
+            const [[existing]] = await connection.query(
+              `SELECT id FROM network WHERE id = ? LIMIT 1`,
+              [networkId]
             );
 
-            if (networks.length > 0) {
-              finalNetworkId = networks[0].id;
-
-              // Move stations & delete duplicates
-              for (let i = 1; i < networks.length; i++) {
-                await connection.query(
-                  `
-                      UPDATE charging_station
-                      SET network_id = ?
-                      WHERE network_id = ?
-                      `,
-                  [finalNetworkId, networks[i].id]
-                );
-
-                await connection.query(`DELETE FROM network WHERE id = ?`, [
-                  networks[i].id,
-                ]);
-              }
-
-              // ✅ Force update name + activate
-              await connection.query(
-                `
-                    UPDATE network
-                    SET name = ?,
-                        status = 1,
-                        updated_at = NOW()
-                    WHERE id = ?
-                    `,
-                [networkName, finalNetworkId]
-              );
+            if (existing) {
+              finalNetworkId = existing.id;
             }
           }
 
-          /* ---------------- LINK STATION ---------------- */
+          /**
+           * CASE 2: Network inactive → deduplicate + activate
+           */
+          if (normalizedNetworkStatus === 0 && networkName) {
+            // find ALL networks with same name
+            const [networks] = await connection.query(
+              `
+              SELECT id, created_at
+              FROM network
+              WHERE name = ?
+              ORDER BY created_at ASC
+              `,
+              [networkName]
+            );
+
+            if (networks.length === 0) {
+              throw new Error("Network not found for given name");
+            }
+
+            // keep OLDEST
+            finalNetworkId = networks[0].id;
+
+            // move stations from duplicates
+            for (let i = 1; i < networks.length; i++) {
+              await connection.query(
+                `
+                UPDATE charging_station
+                SET network_id = ?
+                WHERE network_id = ?
+                `,
+                [finalNetworkId, networks[i].id]
+              );
+
+              await connection.query(`DELETE FROM network WHERE id = ?`, [
+                networks[i].id,
+              ]);
+            }
+
+            // 🔥 THIS WILL NOW ALWAYS RUN
+            await connection.query(
+              `
+              UPDATE network
+              SET
+                name = ?,
+                status = 1,
+                updated_at = NOW()
+              WHERE id = ?
+              `,
+              [networkName, finalNetworkId]
+            );
+          }
+
+          /**
+           * Link station to final network
+           */
           if (finalNetworkId) {
             await connection.query(
               `
-                  UPDATE charging_station
-                  SET network_id = ?
-                  WHERE id = ?
-                  `,
+              UPDATE charging_station
+              SET network_id = ?
+              WHERE id = ?
+              `,
               [finalNetworkId, id]
             );
           }
