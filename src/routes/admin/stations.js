@@ -4,11 +4,9 @@ import { getPagination } from "../../utils/pagination.js";
 
 const router = express.Router();
 
-/**
- * =====================================================
- * GET /api/stations
- * =====================================================
- */
+/* =====================================================
+   GET /api/stations
+===================================================== */
 router.get("/", async (req, res) => {
   try {
     const { page, limit, offset } = getPagination(req.query);
@@ -34,21 +32,11 @@ router.get("/", async (req, res) => {
 
     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    /**
-     * TOTAL COUNT
-     */
     const [[{ total }]] = await db.query(
-      `
-      SELECT COUNT(*) AS total
-      FROM charging_station cs
-      ${whereSQL}
-      `,
+      `SELECT COUNT(*) AS total FROM charging_station cs ${whereSQL}`,
       params
     );
 
-    /**
-     * STEP 1: FETCH STATION IDS (PAGINATION SAFE)
-     */
     const [stationIdRows] = await db.query(
       `
       SELECT cs.id
@@ -60,18 +48,12 @@ router.get("/", async (req, res) => {
       [...params, limit, offset]
     );
 
-    const stationIds = stationIdRows.map((r) => r.id);
+    const stationIds = stationIdRows.map(r => r.id);
 
-    if (stationIds.length === 0) {
-      return res.json({
-        data: [],
-        pagination: { total, page, limit },
-      });
+    if (!stationIds.length) {
+      return res.json({ data: [], pagination: { total, page, limit } });
     }
 
-    /**
-     * STEP 2: FETCH FULL DATA
-     */
     const [rows] = await db.query(
       `
       SELECT
@@ -117,16 +99,12 @@ router.get("/", async (req, res) => {
         GROUP BY station_id
       ) lp ON lp.station_id = cs.id
       LEFT JOIN attachment a ON a.station_id = cs.id
-
       WHERE cs.id IN (?)
       ORDER BY cs.created_at DESC
       `,
       [stationIds]
     );
 
-    /**
-     * MERGE + DEDUP
-     */
     const stationMap = new Map();
 
     for (const r of rows) {
@@ -157,7 +135,7 @@ router.get("/", async (req, res) => {
           approvalDate: r.status === "APPROVED" ? r.approvalDate : null,
           photos: [],
           connectors: [],
-          eVolts: r.eVolts || 0,
+          eVolts: r.eVolts || 0
         });
       }
 
@@ -167,225 +145,33 @@ router.get("/", async (req, res) => {
         station.photos.push(r.photoPath);
       }
 
-      if (r.connectorId) {
-        const exists = station.connectors.find((c) => c.id === r.connectorId);
-
-        if (!exists) {
-          station.connectors.push({
-            id: r.connectorId,
-            chargerTypeId: r.chargerTypeId,
-            type: r.chargerType,
-            name: r.chargerName,
-            count: r.no_of_connectors || 0,
-            powerRating: r.powerRating ? `${r.powerRating} kW` : "-",
-            tariff: r.price_per_khw ? `₹${r.price_per_khw}/kWh` : "-",
-          });
-        }
+      if (r.connectorId && !station.connectors.find(c => c.id === r.connectorId)) {
+        station.connectors.push({
+          id: r.connectorId,
+          chargerTypeId: r.chargerTypeId,
+          type: r.chargerType,
+          name: r.chargerName,
+          count: r.no_of_connectors || 0,
+          powerRating: r.powerRating ? `${r.powerRating} kW` : "-",
+          tariff: r.price_per_khw ? `₹${r.price_per_khw}/kWh` : "-"
+        });
       }
     }
 
     res.json({
       data: Array.from(stationMap.values()),
-      pagination: { total, page, limit },
+      pagination: { total, page, limit }
     });
+
   } catch (err) {
     console.error("GET /stations ERROR:", err);
     res.status(500).json({ message: err.message });
   }
 });
 
-// /**
-//  * =====================================================
-//  * PUT /api/stations/:id
-//  * =====================================================
-//  */
-// router.put("/:id", async (req, res) => {
-//   const connection = await db.getConnection();
-
-//   try {
-//     const { id } = req.params;
-//     const {
-//       action,
-//       reason,
-//       addedByType,
-//       usageType,
-//       stationType,
-//       stationName,
-//       latitude,
-//       longitude,
-//       contactNumber,
-//       open_time,
-//       close_time,
-//       connectors = []
-//     } = req.body;
-
-//     if (!action) {
-//       return res.status(400).json({ message: "action is required" });
-//     }
-
-//     await connection.beginTransaction();
-
-//     /**
-//      * APPROVE
-//      */
-//     if (action === "APPROVE") {
-//       await connection.query(
-//         `
-//         UPDATE charging_station
-//         SET verified = 1,
-//             approved_status = 'APPROVED',
-//             reason = NULL,
-//             updated_at = NOW()
-//         WHERE id = ?
-//         `,
-//         [id]
-//       );
-
-//       await connection.query(
-//         `
-//         UPDATE loyalty_points
-//         SET approved_status = 'APPROVED'
-//         WHERE station_id = ?
-//           AND approved_status = 'PENDING'
-//         `,
-//         [id]
-//       );
-
-//       await connection.commit();
-//       return res.json({ message: "Station approved" });
-//     }
-
-//     /**
-//      * REJECT
-//      */
-//     if (action === "REJECT") {
-//       const rejectReason =
-//         typeof reason === "string" && reason.trim()
-//           ? reason.trim()
-//           : null;
-
-//       await connection.query(
-//         `
-//         UPDATE charging_station
-//         SET verified = 0,
-//             approved_status = 'REJECTED',
-//             reason = ?,
-//             updated_at = NOW()
-//         WHERE id = ?
-//         `,
-//         [rejectReason, id]
-//       );
-
-//       await connection.query(
-//         `
-//         UPDATE loyalty_points
-//         SET approved_status = 'REJECTED'
-//         WHERE station_id = ?
-//           AND approved_status = 'PENDING'
-//         `,
-//         [id]
-//       );
-
-//       await connection.commit();
-//       return res.json({ message: "Station rejected" });
-//     }
-
-//     /**
-//      * SAVE
-//      */
-//     if (action === "SAVE") {
-//         await connection.query(
-//           `
-//           UPDATE charging_station
-//           SET name = ?,
-//               landmark = ?,
-//               latitude = ?,
-//               type = ?,
-//               user_type = ?,
-//               longitude = ?,
-//               mobile = ?,
-//               open_time = ?,
-//               close_time = ?,
-//               updated_at = NOW()
-//           WHERE id = ?
-//           `,
-//           [
-//             stationName,
-//             stationType,
-//             latitude,
-//             usageType,
-//             addedByType,
-//             longitude,
-//             contactNumber,
-//             open_time,
-//             close_time,
-//             id
-//           ]
-//         );
-
-//       const [[cp]] = await connection.query(
-//         `SELECT id FROM charging_point WHERE station_id = ? LIMIT 1`,
-//         [id]
-//       );
-
-//       let chargePointId = cp?.id;
-//       if (!chargePointId) {
-//         const [insert] = await connection.query(
-//           `INSERT INTO charging_point (station_id, status) VALUES (?, 1)`,
-//           [id]
-//         );
-//         chargePointId = insert.insertId;
-//       }
-
-//       await connection.query(
-//         `DELETE FROM connector WHERE charge_point_id = ?`,
-//         [chargePointId]
-//       );
-
-//       for (const c of connectors) {
-//         await connection.query(
-//           `
-//           INSERT INTO connector (
-//             charge_point_id,
-//             charger_type_id,
-//             no_of_connectors,
-//             power,
-//             price_per_khw,
-//             status,
-//             created_at
-//           )
-//           VALUES (?, ?, ?, ?, ?, 1, NOW())
-//           `,
-//           [
-//             chargePointId,
-//             c.chargerTypeId,
-//             c.count,
-//             c.powerRating ? parseFloat(c.powerRating) : null,
-//             c.tariff ? parseFloat(c.tariff) : null
-//           ]
-//         );
-//       }
-
-//       await connection.commit();
-//       return res.json({ message: "Station updated successfully" });
-//     }
-
-//     return res.status(400).json({ message: "Invalid action" });
-
-//   } catch (err) {
-//     await connection.rollback();
-//     console.error("PUT /stations ERROR:", err);
-//     res.status(500).json({ message: err.message });
-//   } finally {
-//     connection.release();
-//   }
-// });
-
-/**
- * =====================================================
- * PUT /api/stations/:id
- * =====================================================
- */
+/* =====================================================
+   PUT /api/stations/:id
+===================================================== */
 router.put("/:id", async (req, res) => {
   const connection = await db.getConnection();
 
@@ -393,22 +179,19 @@ router.put("/:id", async (req, res) => {
     const { id } = req.params;
     const {
       action,
-      reason,
+      stationName,
+      stationType,
       addedByType,
       usageType,
-      stationType,
-      stationName,
       latitude,
       longitude,
       contactNumber,
       open_time,
       close_time,
       connectors = [],
-
-      // 🔹 network fields from frontend
       networkId,
       networkName,
-      networkStatus,
+      networkStatus
     } = req.body;
 
     if (!action) {
@@ -417,87 +200,12 @@ router.put("/:id", async (req, res) => {
 
     await connection.beginTransaction();
 
-    //     /**
-    //      * APPROVE
-    //      */
-    if (action === "APPROVE") {
-      await connection.query(
-        `
-        UPDATE charging_station
-        SET verified = 1,
-            approved_status = 'APPROVED',
-            reason = NULL,
-            updated_at = NOW()
-        WHERE id = ?
-        `,
-        [id]
-      );
-
-      await connection.query(
-        `
-        UPDATE loyalty_points
-        SET approved_status = 'APPROVED'
-        WHERE station_id = ?
-          AND approved_status = 'PENDING'
-        `,
-        [id]
-      );
-
-      await connection.commit();
-      return res.json({ message: "Station approved" });
-    }
-
-    /**
-     * REJECT
-     */
-    if (action === "REJECT") {
-      const rejectReason =
-        typeof reason === "string" && reason.trim() ? reason.trim() : null;
-
-      await connection.query(
-        `
-        UPDATE charging_station
-        SET verified = 0,
-            approved_status = 'REJECTED',
-            reason = ?,
-            updated_at = NOW()
-        WHERE id = ?
-        `,
-        [rejectReason, id]
-      );
-
-      await connection.query(
-        `
-        UPDATE loyalty_points
-        SET approved_status = 'REJECTED'
-        WHERE station_id = ?
-          AND approved_status = 'PENDING'
-        `,
-        [id]
-      );
-
-      await connection.commit();
-      return res.json({ message: "Station rejected" });
-    }
-
-    /**
-     * SAVE
-     */
     if (action === "SAVE") {
-      /* ---------------- STATION UPDATE ---------------- */
       await connection.query(
         `
         UPDATE charging_station
-        SET name = ?,
-            landmark = ?,
-            latitude = ?,
-            type = ?,
-            user_type = ?,
-            longitude = ?,
-            mobile = ?,
-            open_time = ?,
-            close_time = ?,
-            updated_at = NOW()
+        SET name = ?, landmark = ?, latitude = ?, type = ?, user_type = ?,
+            longitude = ?, mobile = ?, open_time = ?, close_time = ?, updated_at = NOW()
         WHERE id = ?
         `,
         [
@@ -510,88 +218,57 @@ router.put("/:id", async (req, res) => {
           contactNumber,
           open_time,
           close_time,
-          id,
+          id
         ]
       );
 
-      /* ---------------- NETWORK LOGIC ---------------- */
-      let finalNetworkId = null;
+      let finalNetworkId = networkId;
 
-      if (networkStatus === 1) {
-        // CASE 1: already active
-        finalNetworkId = networkId;
-      }
-
-      if (networkStatus === 0 && networkName) {
-        // Find all networks with same name
-        const [networks] = await connection.query(
-          `
-    SELECT id, created_at
-    FROM network
-    WHERE name = ?
-    ORDER BY created_at ASC
-    `,
-          [networkName]
+      if (networkName) {
+        const [[baseNetwork]] = await connection.query(
+          `SELECT id FROM network WHERE id = ? LIMIT 1`,
+          [networkId]
         );
 
-        if (networks.length > 0) {
-          // Oldest → keep
-          finalNetworkId = networks[0].id;
+        if (baseNetwork) {
+          const [duplicates] = await connection.query(
+            `
+            SELECT id FROM network
+            WHERE name = ? AND id != ?
+            ORDER BY created_at DESC
+            `,
+            [networkName, baseNetwork.id]
+          );
 
-          // Delete newer duplicates
-          for (let i = 1; i < networks.length; i++) {
-            // Move stations first
+          for (const dup of duplicates) {
             await connection.query(
-              `
-        UPDATE charging_station
-        SET network_id = ?
-        WHERE network_id = ?
-        `,
-              [finalNetworkId, networks[i].id]
+              `UPDATE charging_station SET network_id = ? WHERE network_id = ?`,
+              [baseNetwork.id, dup.id]
             );
 
-            // Delete duplicate network
-            await connection.query(`DELETE FROM network WHERE id = ?`, [
-              networks[i].id,
-            ]);
+            await connection.query(`DELETE FROM network WHERE id = ?`, [dup.id]);
           }
 
-          // ✅ THIS IS THE PART YOU ASKED ABOUT
-          // Update network name + activate it
           await connection.query(
             `
-      UPDATE network
-      SET
-        name = ?,
-        status = 1,
-        updated_at = NOW()
-      WHERE id = ?
-      `,
-            [networkName, finalNetworkId]
+            UPDATE network
+            SET name = ?, status = 1, updated_at = NOW()
+            WHERE id = ?
+            `,
+            [networkName, baseNetwork.id]
           );
+
+          finalNetworkId = baseNetwork.id;
         }
       }
 
-      /* Link station to final network */
       if (finalNetworkId) {
-        const [[station]] = await connection.query(
-          `SELECT network_id FROM charging_station WHERE id = ? LIMIT 1`,
-          [id]
+        await connection.query(
+          `UPDATE charging_station SET network_id = ? WHERE id = ?`,
+          [finalNetworkId, id]
         );
-
-        if (!station.network_id || station.network_id !== finalNetworkId) {
-          await connection.query(
-            `
-      UPDATE charging_station
-      SET network_id = ?
-      WHERE id = ?
-      `,
-            [finalNetworkId, id]
-          );
-        }
       }
 
-      /* ---------------- CONNECTORS ---------------- */
       const [[cp]] = await connection.query(
         `SELECT id FROM charging_point WHERE station_id = ? LIMIT 1`,
         [id]
@@ -615,13 +292,8 @@ router.put("/:id", async (req, res) => {
         await connection.query(
           `
           INSERT INTO connector (
-            charge_point_id,
-            charger_type_id,
-            no_of_connectors,
-            power,
-            price_per_khw,
-            status,
-            created_at
+            charge_point_id, charger_type_id, no_of_connectors,
+            power, price_per_khw, status, created_at
           )
           VALUES (?, ?, ?, ?, ?, 1, NOW())
           `,
@@ -630,7 +302,7 @@ router.put("/:id", async (req, res) => {
             c.chargerTypeId,
             c.count,
             c.powerRating ? parseFloat(c.powerRating) : null,
-            c.tariff ? parseFloat(c.tariff) : null,
+            c.tariff ? parseFloat(c.tariff) : null
           ]
         );
       }
@@ -639,7 +311,8 @@ router.put("/:id", async (req, res) => {
       return res.json({ message: "Station updated successfully" });
     }
 
-    return res.status(400).json({ message: "Invalid action" });
+    res.status(400).json({ message: "Invalid action" });
+
   } catch (err) {
     await connection.rollback();
     console.error("PUT /stations ERROR:", err);
