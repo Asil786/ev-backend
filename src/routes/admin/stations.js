@@ -34,21 +34,13 @@ router.get("/", async (req, res) => {
 
     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    /**
-     * TOTAL COUNT
-     */
+    /* ---------- TOTAL COUNT ---------- */
     const [[{ total }]] = await db.query(
-      `
-      SELECT COUNT(*) AS total
-      FROM charging_station cs
-      ${whereSQL}
-      `,
+      `SELECT COUNT(*) AS total FROM charging_station cs ${whereSQL}`,
       params
     );
 
-    /**
-     * STEP 1: FETCH STATION IDS (PAGINATION SAFE)
-     */
+    /* ---------- STEP 1: FETCH STATION IDS ---------- */
     const [stationIdRows] = await db.query(
       `
       SELECT cs.id
@@ -62,16 +54,14 @@ router.get("/", async (req, res) => {
 
     const stationIds = stationIdRows.map((r) => r.id);
 
-    if (stationIds.length === 0) {
+    if (!stationIds.length) {
       return res.json({
         data: [],
         pagination: { total, page, limit },
       });
     }
 
-    /**
-     * STEP 2: FETCH FULL DATA
-     */
+    /* ---------- STEP 2: FETCH FULL DATA ---------- */
     const [rows] = await db.query(
       `
       SELECT
@@ -89,7 +79,9 @@ router.get("/", async (req, res) => {
         cs.user_type AS addedByType,
         cs.landmark AS landMark,
 
+        n.id AS networkId,
         n.name AS networkName,
+        n.status AS networkStatus,
 
         CONCAT(cu.first_name, ' ', cu.last_name) AS userName,
 
@@ -124,9 +116,7 @@ router.get("/", async (req, res) => {
       [stationIds]
     );
 
-    /**
-     * MERGE + DEDUP
-     */
+    /* ---------- MERGE + DEDUP ---------- */
     const stationMap = new Map();
 
     for (const r of rows) {
@@ -137,7 +127,11 @@ router.get("/", async (req, res) => {
           stationNumber: `CS-${r.id}`,
           latitude: r.latitude,
           longitude: r.longitude,
-          networkName: r.networkName,
+
+          networkId: r.networkId || null,
+          networkName: r.networkName || "-",
+          networkStatus: r.networkStatus ?? 0,
+
           userName: r.userName,
           addedByType: r.addedByType,
           contactNumber: r.contactNumber,
@@ -167,20 +161,19 @@ router.get("/", async (req, res) => {
         station.photos.push(r.photoPath);
       }
 
-      if (r.connectorId) {
-        const exists = station.connectors.find((c) => c.id === r.connectorId);
-
-        if (!exists) {
-          station.connectors.push({
-            id: r.connectorId,
-            chargerTypeId: r.chargerTypeId,
-            type: r.chargerType,
-            name: r.chargerName,
-            count: r.no_of_connectors || 0,
-            powerRating: r.powerRating ? `${r.powerRating} kW` : "-",
-            tariff: r.price_per_khw ? `₹${r.price_per_khw}/kWh` : "-",
-          });
-        }
+      if (
+        r.connectorId &&
+        !station.connectors.find((c) => c.id === r.connectorId)
+      ) {
+        station.connectors.push({
+          id: r.connectorId,
+          chargerTypeId: r.chargerTypeId,
+          type: r.chargerType,
+          name: r.chargerName,
+          count: r.no_of_connectors || 0,
+          powerRating: r.powerRating ? `${r.powerRating} kW` : "-",
+          tariff: r.price_per_khw ? `₹${r.price_per_khw}/kWh` : "-",
+        });
       }
     }
 
@@ -216,7 +209,7 @@ router.put("/:id", async (req, res) => {
       contactNumber,
       open_time,
       close_time,
-      connectors = []
+      connectors = [],
     } = req.body;
 
     if (!action) {
@@ -260,9 +253,7 @@ router.put("/:id", async (req, res) => {
      */
     if (action === "REJECT") {
       const rejectReason =
-        typeof reason === "string" && reason.trim()
-          ? reason.trim()
-          : null;
+        typeof reason === "string" && reason.trim() ? reason.trim() : null;
 
       await connection.query(
         `
@@ -294,8 +285,8 @@ router.put("/:id", async (req, res) => {
      * SAVE
      */
     if (action === "SAVE") {
-        await connection.query(
-          `
+      await connection.query(
+        `
           UPDATE charging_station
           SET name = ?,
               landmark = ?,
@@ -309,19 +300,452 @@ router.put("/:id", async (req, res) => {
               updated_at = NOW()
           WHERE id = ?
           `,
-          [
+        [
+          stationName,
+          stationType,
+          latitude,
+          usageType,
+          addedByType,
+          longitude,
+          contactNumber,
+          open_time,
+          close_time,
+          id,
+        ]
+      );
+
+      // /* =====================================================
+      //    GET /api/stations
+      // ===================================================== */
+      // router.get("/", async (req, res) => {
+      //   try {
+      //     const { page, limit, offset } = getPagination(req.query);
+      //     const { status, startDate, endDate } = req.query;
+
+      //     const where = [];
+      //     const params = [];
+
+      //     if (status && status !== "All") {
+      //       where.push("cs.approved_status = ?");
+      //       params.push(status.toUpperCase());
+      //     }
+
+      //     if (startDate) {
+      //       where.push("cs.created_at >= ?");
+      //       params.push(startDate);
+      //     }
+
+      //     if (endDate) {
+      //       where.push("cs.created_at <= ?");
+      //       params.push(endDate);
+      //     }
+
+      //     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+      //     const [[{ total }]] = await db.query(
+      //       `SELECT COUNT(*) AS total FROM charging_station cs ${whereSQL}`,
+      //       params
+      //     );
+
+      //     const [stationIdRows] = await db.query(
+      //       `
+      //       SELECT cs.id
+      //       FROM charging_station cs
+      //       ${whereSQL}
+      //       ORDER BY cs.created_at DESC
+      //       LIMIT ? OFFSET ?
+      //       `,
+      //       [...params, limit, offset]
+      //     );
+
+      //     const stationIds = stationIdRows.map(r => r.id);
+
+      //     if (!stationIds.length) {
+      //       return res.json({ data: [], pagination: { total, page, limit } });
+      //     }
+
+      //     const [rows] = await db.query(
+      //       `
+      //       SELECT
+      //         cs.id,
+      //         cs.name AS stationName,
+      //         cs.latitude,
+      //         cs.longitude,
+      //         cs.mobile AS contactNumber,
+      //         cs.created_at AS submissionDate,
+      //         cs.updated_at AS approvalDate,
+      //         cs.approved_status AS status,
+      //         cs.open_time,
+      //         cs.close_time,
+      //         cs.type AS usageType,
+      //         cs.user_type AS addedByType,
+      //         cs.landmark AS landMark,
+
+      //         n.name AS networkName,
+
+      //         CONCAT(cu.first_name, ' ', cu.last_name) AS userName,
+
+      //         c.id AS connectorId,
+      //         ct.id AS chargerTypeId,
+      //         ct.name AS chargerName,
+      //         ct.type AS chargerType,
+      //         ct.max_power AS powerRating,
+      //         c.no_of_connectors,
+      //         c.price_per_khw,
+
+      //         lp.eVolts,
+      //         a.path AS photoPath
+
+      //       FROM charging_station cs
+      //       LEFT JOIN network n ON n.id = cs.network_id
+      //       LEFT JOIN customer cu ON cu.id = cs.created_by
+      //       LEFT JOIN charging_point cp ON cp.station_id = cs.id
+      //       LEFT JOIN connector c ON c.charge_point_id = cp.id
+      //       LEFT JOIN charger_types ct ON ct.id = c.charger_type_id
+      //       LEFT JOIN (
+      //         SELECT station_id, SUM(points) AS eVolts
+      //         FROM loyalty_points
+      //         WHERE approved_status = 'APPROVED'
+      //         GROUP BY station_id
+      //       ) lp ON lp.station_id = cs.id
+      //       LEFT JOIN attachment a ON a.station_id = cs.id
+      //       WHERE cs.id IN (?)
+      //       ORDER BY cs.created_at DESC
+      //       `,
+      //       [stationIds]
+      //     );
+
+      //     const stationMap = new Map();
+
+      //     for (const r of rows) {
+      //       if (!stationMap.has(r.id)) {
+      //         stationMap.set(r.id, {
+      //           id: r.id,
+      //           stationName: r.stationName,
+      //           stationNumber: `CS-${r.id}`,
+      //           latitude: r.latitude,
+      //           longitude: r.longitude,
+      //           networkName: r.networkName,
+      //           userName: r.userName,
+      //           addedByType: r.addedByType,
+      //           contactNumber: r.contactNumber,
+      //           usageType: r.usageType === "PUBLIC" ? "Public" : "Private",
+      //           landMark: r.landMark || "-",
+      //           operationalHours:
+      //             r.open_time && r.close_time
+      //               ? `${r.open_time} - ${r.close_time}`
+      //               : "-",
+      //           status:
+      //             r.status === "APPROVED"
+      //               ? "Approved"
+      //               : r.status === "REJECTED"
+      //               ? "Rejected"
+      //               : "Pending",
+      //           submissionDate: r.submissionDate,
+      //           approvalDate: r.status === "APPROVED" ? r.approvalDate : null,
+      //           photos: [],
+      //           connectors: [],
+      //           eVolts: r.eVolts || 0
+      //         });
+      //       }
+
+      //       const station = stationMap.get(r.id);
+
+      //       if (r.photoPath && !station.photos.includes(r.photoPath)) {
+      //         station.photos.push(r.photoPath);
+      //       }
+
+      //       if (r.connectorId && !station.connectors.find(c => c.id === r.connectorId)) {
+      //         station.connectors.push({
+      //           id: r.connectorId,
+      //           chargerTypeId: r.chargerTypeId,
+      //           type: r.chargerType,
+      //           name: r.chargerName,
+      //           count: r.no_of_connectors || 0,
+      //           powerRating: r.powerRating ? `${r.powerRating} kW` : "-",
+      //           tariff: r.price_per_khw ? `₹${r.price_per_khw}/kWh` : "-"
+      //         });
+      //       }
+      //     }
+
+      //     res.json({
+      //       data: Array.from(stationMap.values()),
+      //       pagination: { total, page, limit }
+      //     });
+
+      //   } catch (err) {
+      //     console.error("GET /stations ERROR:", err);
+      //     res.status(500).json({ message: err.message });
+      //   }
+      // });
+
+      // /* =====================================================
+      //    PUT /api/stations/:id
+      // ===================================================== */
+      // router.put("/:id", async (req, res) => {
+      //   const connection = await db.getConnection();
+
+      //   try {
+      //     const { id } = req.params;
+      //     const {
+      //       action,
+      //       stationName,
+      //       stationType,
+      //       addedByType,
+      //       usageType,
+      //       latitude,
+      //       longitude,
+      //       contactNumber,
+      //       open_time,
+      //       close_time,
+      //       connectors = [],
+      //       networkId,
+      //       networkName,
+      //       networkStatus
+      //     } = req.body;
+
+      //     if (!action) {
+      //       return res.status(400).json({ message: "action is required" });
+      //     }
+
+      //     await connection.beginTransaction();
+
+      //     if (action === "SAVE") {
+      //       await connection.query(
+      //         `
+      //         UPDATE charging_station
+      //         SET name = ?, landmark = ?, latitude = ?, type = ?, user_type = ?,
+      //             longitude = ?, mobile = ?, open_time = ?, close_time = ?, updated_at = NOW()
+      //         WHERE id = ?
+      //         `,
+      //         [
+      //           stationName,
+      //           stationType,
+      //           latitude,
+      //           usageType,
+      //           addedByType,
+      //           longitude,
+      //           contactNumber,
+      //           open_time,
+      //           close_time,
+      //           id
+      //         ]
+      //       );
+
+      //       /* ---------------- NETWORK LOGIC (FIXED) ---------------- */
+
+      //       let finalNetworkId = null;
+      //       const normalizedNetworkStatus = Number(networkStatus);
+
+      //       /**
+      //        * CASE 1: Network already active
+      //        */
+      //       if (normalizedNetworkStatus === 1 && networkId) {
+      //         // verify network exists
+      //         const [[existing]] = await connection.query(
+      //           `SELECT id FROM network WHERE id = ? LIMIT 1`,
+      //           [networkId]
+      //         );
+
+      //         if (existing) {
+      //           finalNetworkId = existing.id;
+      //         }
+      //       }
+
+      //       /**
+      //        * CASE 2: Network inactive → deduplicate + activate
+      //        */
+      //       if (normalizedNetworkStatus === 0 && networkName) {
+      //         // find ALL networks with same name
+      //         const [networks] = await connection.query(
+      //           `
+      //           SELECT id, created_at
+      //           FROM network
+      //           WHERE name = ?
+      //           ORDER BY created_at ASC
+      //           `,
+      //           [networkName]
+      //         );
+
+      //         if (networks.length === 0) {
+      //           throw new Error("Network not found for given name");
+      //         }
+
+      //         // keep OLDEST
+      //         finalNetworkId = networks[0].id;
+
+      //         // move stations from duplicates
+      //         for (let i = 1; i < networks.length; i++) {
+      //           await connection.query(
+      //             `
+      //             UPDATE charging_station
+      //             SET network_id = ?
+      //             WHERE network_id = ?
+      //             `,
+      //             [finalNetworkId, networks[i].id]
+      //           );
+
+      //           await connection.query(
+      //             `DELETE FROM network WHERE id = ?`,
+      //             [networks[i].id]
+      //           );
+      //         }
+
+      //         // 🔥 THIS WILL NOW ALWAYS RUN
+      //         await connection.query(
+      //           `
+      //           UPDATE network
+      //           SET
+      //             name = ?,
+      //             status = 1,
+      //             updated_at = NOW()
+      //           WHERE id = ?
+      //           `,
+      //           [networkName, finalNetworkId]
+      //         );
+      //       }
+
+      //       /**
+      //        * Link station to final network
+      //        */
+      //       if (finalNetworkId) {
+      //         await connection.query(
+      //           `
+      //           UPDATE charging_station
+      //           SET network_id = ?
+      //           WHERE id = ?
+      //           `,
+      //           [finalNetworkId, id]
+      //         );
+      //       }
+      router.put("/:id", async (req, res) => {
+        const connection = await db.getConnection();
+
+        try {
+          const { id } = req.params;
+          const {
+            action,
             stationName,
             stationType,
             latitude,
-            usageType,
-            addedByType,
             longitude,
             contactNumber,
             open_time,
             close_time,
-            id
-          ]
-        );
+
+            networkId,
+            networkName,
+            networkStatus,
+          } = req.body;
+
+          await connection.beginTransaction();
+
+          if (action !== "SAVE") {
+            return res
+              .status(400)
+              .json({ message: "Only SAVE supported here" });
+          }
+
+          /* ---------------- STATION UPDATE ---------------- */
+          await connection.query(
+            `
+                UPDATE charging_station
+                SET name = ?,
+                    latitude = ?,
+                    longitude = ?,
+                    mobile = ?,
+                    open_time = ?,
+                    close_time = ?,
+                    updated_at = NOW()
+                WHERE id = ?
+                `,
+            [
+              stationName,
+              latitude,
+              longitude,
+              contactNumber,
+              open_time,
+              close_time,
+              id,
+            ]
+          );
+
+          /* ---------------- NETWORK LOGIC ---------------- */
+          let finalNetworkId = null;
+          const netStatus = Number(networkStatus);
+
+          if (netStatus === 1 && networkId) {
+            // ACTIVE → just ensure link
+            finalNetworkId = networkId;
+          }
+
+          if (netStatus === 0 && networkName) {
+            // Find all duplicate networks
+            const [networks] = await connection.query(
+              `
+                  SELECT id, created_at
+                  FROM network
+                  WHERE name = ?
+                  ORDER BY created_at ASC
+                  `,
+              [networkName]
+            );
+
+            if (networks.length > 0) {
+              finalNetworkId = networks[0].id;
+
+              // Move stations & delete duplicates
+              for (let i = 1; i < networks.length; i++) {
+                await connection.query(
+                  `
+                      UPDATE charging_station
+                      SET network_id = ?
+                      WHERE network_id = ?
+                      `,
+                  [finalNetworkId, networks[i].id]
+                );
+
+                await connection.query(`DELETE FROM network WHERE id = ?`, [
+                  networks[i].id,
+                ]);
+              }
+
+              // ✅ Force update name + activate
+              await connection.query(
+                `
+                    UPDATE network
+                    SET name = ?,
+                        status = 1,
+                        updated_at = NOW()
+                    WHERE id = ?
+                    `,
+                [networkName, finalNetworkId]
+              );
+            }
+          }
+
+          /* ---------------- LINK STATION ---------------- */
+          if (finalNetworkId) {
+            await connection.query(
+              `
+                  UPDATE charging_station
+                  SET network_id = ?
+                  WHERE id = ?
+                  `,
+              [finalNetworkId, id]
+            );
+          }
+
+          await connection.commit();
+          res.json({ message: "Station & network updated successfully" });
+        } catch (err) {
+          await connection.rollback();
+          console.error("PUT /stations ERROR:", err);
+          res.status(500).json({ message: err.message });
+        } finally {
+          connection.release();
+        }
+      });
 
       const [[cp]] = await connection.query(
         `SELECT id FROM charging_point WHERE station_id = ? LIMIT 1`,
@@ -346,13 +770,8 @@ router.put("/:id", async (req, res) => {
         await connection.query(
           `
           INSERT INTO connector (
-            charge_point_id,
-            charger_type_id,
-            no_of_connectors,
-            power,
-            price_per_khw,
-            status,
-            created_at
+            charge_point_id, charger_type_id, no_of_connectors,
+            power, price_per_khw, status, created_at
           )
           VALUES (?, ?, ?, ?, ?, 1, NOW())
           `,
@@ -361,7 +780,7 @@ router.put("/:id", async (req, res) => {
             c.chargerTypeId,
             c.count,
             c.powerRating ? parseFloat(c.powerRating) : null,
-            c.tariff ? parseFloat(c.tariff) : null
+            c.tariff ? parseFloat(c.tariff) : null,
           ]
         );
       }
@@ -369,9 +788,6 @@ router.put("/:id", async (req, res) => {
       await connection.commit();
       return res.json({ message: "Station updated successfully" });
     }
-
-    return res.status(400).json({ message: "Invalid action" });
-
   } catch (err) {
     await connection.rollback();
     console.error("PUT /stations ERROR:", err);
