@@ -18,6 +18,9 @@ app.use("/api/trips", tripRoutes);
 app.use("/api/auth/vendor", authRoutes);
 app.use("/api/networks", networkRoutes);
 
-app.listen(process.env.PORT || process.env.URL_BACKEND,() => {
-  console.log("Backend running");
+const PORT = process.env.PORT || 4000;
+
+app.listen(PORT, () => {
+  console.log(`🚀 Backend server running on http://localhost:${PORT}`);
+  console.log(`📊 API endpoints available at http://localhost:${PORT}/api`);
 });
