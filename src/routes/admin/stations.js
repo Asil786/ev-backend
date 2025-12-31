@@ -34,7 +34,9 @@ router.get("/", async (req, res) => {
 
     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    /* ---------- TOTAL COUNT ---------- */
+    /**
+     * TOTAL COUNT
+     */
     const [[{ total }]] = await db.query(
       `
       SELECT COUNT(*) AS total
@@ -44,7 +46,9 @@ router.get("/", async (req, res) => {
       params
     );
 
-    /* ---------- STEP 1: FETCH STATION IDS ---------- */
+    /**
+     * STEP 1: FETCH STATION IDS (PAGINATION SAFE)
+     */
     const [stationIdRows] = await db.query(
       `
       SELECT cs.id
@@ -65,7 +69,9 @@ router.get("/", async (req, res) => {
       });
     }
 
-    /* ---------- STEP 2: FETCH FULL DATA ---------- */
+    /**
+     * STEP 2: FETCH FULL DATA
+     */
     const [rows] = await db.query(
       `
       SELECT
@@ -77,18 +83,15 @@ router.get("/", async (req, res) => {
         cs.created_at AS submissionDate,
         cs.updated_at AS approvalDate,
         cs.approved_status AS status,
-        cs.reason AS rejectionReason,
         cs.open_time,
         cs.close_time,
         cs.type AS usageType,
+        cs.user_type AS addedByType,
+        cs.landmark AS landMark,
 
         n.name AS networkName,
 
         CONCAT(cu.first_name, ' ', cu.last_name) AS userName,
-        CASE
-          WHEN cu.name_type = 'IS_VANGUARD' THEN 'CPO'
-          ELSE 'EV Owner'
-        END AS addedByType,
 
         c.id AS connectorId,
         ct.id AS chargerTypeId,
@@ -98,30 +101,21 @@ router.get("/", async (req, res) => {
         c.no_of_connectors,
         c.price_per_khw,
 
-        /* ✅ LOYALTY POINTS (MATCH station_id + customer_id) */
         lp.eVolts,
-
         a.path AS photoPath
 
       FROM charging_station cs
-
       LEFT JOIN network n ON n.id = cs.network_id
       LEFT JOIN customer cu ON cu.id = cs.created_by
       LEFT JOIN charging_point cp ON cp.station_id = cs.id
       LEFT JOIN connector c ON c.charge_point_id = cp.id
       LEFT JOIN charger_types ct ON ct.id = c.charger_type_id
-
       LEFT JOIN (
-        SELECT
-          station_id,
-          customer_id,
-          SUM(points) AS eVolts
+        SELECT station_id, SUM(points) AS eVolts
         FROM loyalty_points
         WHERE approved_status = 'APPROVED'
-        GROUP BY station_id, customer_id
+        GROUP BY station_id
       ) lp ON lp.station_id = cs.id
-           AND lp.customer_id = cs.created_by
-
       LEFT JOIN attachment a ON a.station_id = cs.id
 
       WHERE cs.id IN (?)
@@ -130,7 +124,9 @@ router.get("/", async (req, res) => {
       [stationIds]
     );
 
-    /* ---------- MERGE + DEDUP ---------- */
+    /**
+     * MERGE + DEDUP
+     */
     const stationMap = new Map();
 
     for (const r of rows) {
@@ -146,6 +142,7 @@ router.get("/", async (req, res) => {
           addedByType: r.addedByType,
           contactNumber: r.contactNumber,
           usageType: r.usageType === "PUBLIC" ? "Public" : "Private",
+          landMark: r.landMark || "-",
           operationalHours:
             r.open_time && r.close_time
               ? `${r.open_time} - ${r.close_time}`
@@ -158,12 +155,9 @@ router.get("/", async (req, res) => {
               : "Pending",
           submissionDate: r.submissionDate,
           approvalDate: r.status === "APPROVED" ? r.approvalDate : null,
-
-          reason: r.rejectionReason || "-",
-
           photos: [],
           connectors: [],
-          eVolts: r.eVolts || 0   // ✅ SENT TO FRONTEND
+          eVolts: r.eVolts || 0
         });
       }
 
@@ -218,12 +212,16 @@ router.put("/:id", async (req, res) => {
     const {
       action,
       reason,
+      addedByType,
+      usageType,
+      stationType,
       stationName,
       latitude,
       longitude,
       contactNumber,
       open_time,
-      close_time
+      close_time,
+      connectors = []
     } = req.body;
 
     if (!action) {
@@ -232,6 +230,9 @@ router.put("/:id", async (req, res) => {
 
     await connection.beginTransaction();
 
+    /**
+     * APPROVE
+     */
     if (action === "APPROVE") {
       await connection.query(
         `
@@ -259,7 +260,15 @@ router.put("/:id", async (req, res) => {
       return res.json({ message: "Station approved" });
     }
 
+    /**
+     * REJECT
+     */
     if (action === "REJECT") {
+      const rejectReason =
+        typeof reason === "string" && reason.trim()
+          ? reason.trim()
+          : null;
+
       await connection.query(
         `
         UPDATE charging_station
@@ -269,7 +278,7 @@ router.put("/:id", async (req, res) => {
             updated_at = NOW()
         WHERE id = ?
         `,
-        [reason || null, id]
+        [rejectReason, id]
       );
 
       await connection.query(
@@ -286,29 +295,81 @@ router.put("/:id", async (req, res) => {
       return res.json({ message: "Station rejected" });
     }
 
+    /**
+     * SAVE
+     */
     if (action === "SAVE") {
-      await connection.query(
-        `
-        UPDATE charging_station
-        SET name = ?,
-            latitude = ?,
-            longitude = ?,
-            mobile = ?,
-            open_time = ?,
-            close_time = ?,
-            updated_at = NOW()
-        WHERE id = ?
-        `,
-        [
-          stationName,
-          latitude,
-          longitude,
-          contactNumber,
-          open_time,
-          close_time,
-          id
-        ]
+        await connection.query(
+          `
+          UPDATE charging_station
+          SET name = ?,
+              landmark = ?,
+              latitude = ?,
+              type = ?,
+              user_type = ?,
+              longitude = ?,
+              mobile = ?,
+              open_time = ?,
+              close_time = ?,
+              updated_at = NOW()
+          WHERE id = ?
+          `,
+          [
+            stationName,
+            stationType,
+            latitude,
+            usageType,
+            addedByType,
+            longitude,
+            contactNumber,
+            open_time,
+            close_time,
+            id
+          ]
+        );
+
+      const [[cp]] = await connection.query(
+        `SELECT id FROM charging_point WHERE station_id = ? LIMIT 1`,
+        [id]
       );
+
+      let chargePointId = cp?.id;
+      if (!chargePointId) {
+        const [insert] = await connection.query(
+          `INSERT INTO charging_point (station_id, status) VALUES (?, 1)`,
+          [id]
+        );
+        chargePointId = insert.insertId;
+      }
+
+      await connection.query(
+        `DELETE FROM connector WHERE charge_point_id = ?`,
+        [chargePointId]
+      );
+
+      for (const c of connectors) {
+        await connection.query(
+          `
+          INSERT INTO connector (
+            charge_point_id,
+            charger_type_id,
+            no_of_connectors,
+            power,
+            price_per_khw,
+            status,
+            created_at
+          )
+          VALUES (?, ?, ?, ?, ?, 1, NOW())
+          `,
+          [
+            chargePointId,
+            c.chargerTypeId,
+            c.count,
+            c.powerRating ? parseFloat(c.powerRating) : null,
+            c.tariff ? parseFloat(c.tariff) : null
+          ]
+        );
+      }
 
       await connection.commit();
       return res.json({ message: "Station updated successfully" });
