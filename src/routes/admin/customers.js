@@ -4,6 +4,70 @@ import { getPagination } from "../../utils/pagination.js";
 
 const router = express.Router();
 
+/**
+ * @swagger
+ * /api/customers:
+ *   get:
+ *     summary: Get paginated list of customers
+ *     description: Retrieves a paginated list of customers with their vehicle information, device details, and subscription status
+ *     tags:
+ *       - Customers
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Page number for pagination
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 10
+ *         description: Number of records per page
+ *     responses:
+ *       200:
+ *         description: Successful response with customer data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CustomersResponse'
+ *             example:
+ *               data:
+ *                 - firstName: John
+ *                   lastName: Doe
+ *                   email: john.doe@example.com
+ *                   phone: "9876543210"
+ *                   customerRegDate: "2024-01-15T10:30:00.000Z"
+ *                   vehicleRegDate: "2024-01-20T14:00:00.000Z"
+ *                   registrationNumber: MH12AB1234
+ *                   subscription: Premium
+ *                   vehicleType: Car
+ *                   manufacturer: Tata
+ *                   vehicleModel: Nexon EV
+ *                   vehicleVariant: Max
+ *                   deviceBrand: Samsung
+ *                   deviceModel: Galaxy S21
+ *                   devicePlatform: Android
+ *                   appVersion: "2.1.0"
+ *                   navigation: "Yes"
+ *                   trip: "Yes"
+ *                   checkIn: "Yes"
+ *               pagination:
+ *                 total: 150
+ *                 page: 1
+ *                 limit: 10
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+
 router.get("/", async (req, res) => {
   try {
     const { page, limit, offset } = getPagination(req.query);
@@ -112,8 +176,8 @@ router.get("/", async (req, res) => {
         r.has_trip && r.has_checkin
           ? "Premium"
           : r.has_trip
-          ? "Gold"
-          : "Basic",
+            ? "Gold"
+            : "Basic",
 
       vehicleType: r.vehicle_type,
       manufacturer: r.manufacturer,

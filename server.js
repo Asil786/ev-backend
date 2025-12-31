@@ -6,6 +6,8 @@ import stationRoutes from "./src/routes/admin/stations.js";
 import tripRoutes from "./src/routes/admin/trips.js";
 import authRoutes from "./src/routes/admin/auth.js";
 import networkRoutes from "./src/routes/admin/networks.js";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./src/swagger.js";
 
 dotenv.config();
 const app = express();
@@ -17,6 +19,12 @@ app.use("/api/stations", stationRoutes);
 app.use("/api/trips", tripRoutes);
 app.use("/api/auth/vendor", authRoutes);
 app.use("/api/networks", networkRoutes);
+
+// Swagger Documentation
+app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: "EVJoints Admin API Docs"
+}));
 
 const PORT = process.env.PORT || 4000;
 
