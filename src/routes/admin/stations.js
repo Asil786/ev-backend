@@ -4,9 +4,11 @@ import { getPagination } from "../../utils/pagination.js";
 
 const router = express.Router();
 
-/* =====================================================
-   GET /api/stations
-===================================================== */
+/**
+ * =====================================================
+ * GET /api/stations
+ * =====================================================
+ */
 router.get("/", async (req, res) => {
   try {
     const { page, limit, offset } = getPagination(req.query);
@@ -32,11 +34,13 @@ router.get("/", async (req, res) => {
 
     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
+    /* ---------- TOTAL COUNT ---------- */
     const [[{ total }]] = await db.query(
       `SELECT COUNT(*) AS total FROM charging_station cs ${whereSQL}`,
       params
     );
 
+    /* ---------- STEP 1: FETCH STATION IDS ---------- */
     const [stationIdRows] = await db.query(
       `
       SELECT cs.id
@@ -51,9 +55,13 @@ router.get("/", async (req, res) => {
     const stationIds = stationIdRows.map(r => r.id);
 
     if (!stationIds.length) {
-      return res.json({ data: [], pagination: { total, page, limit } });
+      return res.json({
+        data: [],
+        pagination: { total, page, limit }
+      });
     }
 
+    /* ---------- STEP 2: FETCH FULL DATA ---------- */
     const [rows] = await db.query(
       `
       SELECT
@@ -71,7 +79,9 @@ router.get("/", async (req, res) => {
         cs.user_type AS addedByType,
         cs.landmark AS landMark,
 
+        n.id AS networkId,
         n.name AS networkName,
+        n.status AS networkStatus,
 
         CONCAT(cu.first_name, ' ', cu.last_name) AS userName,
 
@@ -99,12 +109,14 @@ router.get("/", async (req, res) => {
         GROUP BY station_id
       ) lp ON lp.station_id = cs.id
       LEFT JOIN attachment a ON a.station_id = cs.id
+
       WHERE cs.id IN (?)
       ORDER BY cs.created_at DESC
       `,
       [stationIds]
     );
 
+    /* ---------- MERGE + DEDUP ---------- */
     const stationMap = new Map();
 
     for (const r of rows) {
@@ -115,7 +127,11 @@ router.get("/", async (req, res) => {
           stationNumber: `CS-${r.id}`,
           latitude: r.latitude,
           longitude: r.longitude,
-          networkName: r.networkName,
+
+          networkId: r.networkId || null,
+          networkName: r.networkName || "-",
+          networkStatus: r.networkStatus ?? 0,
+
           userName: r.userName,
           addedByType: r.addedByType,
           contactNumber: r.contactNumber,
@@ -168,6 +184,172 @@ router.get("/", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+// /* =====================================================
+//    GET /api/stations
+// ===================================================== */
+// router.get("/", async (req, res) => {
+//   try {
+//     const { page, limit, offset } = getPagination(req.query);
+//     const { status, startDate, endDate } = req.query;
+
+//     const where = [];
+//     const params = [];
+
+//     if (status && status !== "All") {
+//       where.push("cs.approved_status = ?");
+//       params.push(status.toUpperCase());
+//     }
+
+//     if (startDate) {
+//       where.push("cs.created_at >= ?");
+//       params.push(startDate);
+//     }
+
+//     if (endDate) {
+//       where.push("cs.created_at <= ?");
+//       params.push(endDate);
+//     }
+
+//     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
+
+//     const [[{ total }]] = await db.query(
+//       `SELECT COUNT(*) AS total FROM charging_station cs ${whereSQL}`,
+//       params
+//     );
+
+//     const [stationIdRows] = await db.query(
+//       `
+//       SELECT cs.id
+//       FROM charging_station cs
+//       ${whereSQL}
+//       ORDER BY cs.created_at DESC
+//       LIMIT ? OFFSET ?
+//       `,
+//       [...params, limit, offset]
+//     );
+
+//     const stationIds = stationIdRows.map(r => r.id);
+
+//     if (!stationIds.length) {
+//       return res.json({ data: [], pagination: { total, page, limit } });
+//     }
+
+//     const [rows] = await db.query(
+//       `
+//       SELECT
+//         cs.id,
+//         cs.name AS stationName,
+//         cs.latitude,
+//         cs.longitude,
+//         cs.mobile AS contactNumber,
+//         cs.created_at AS submissionDate,
+//         cs.updated_at AS approvalDate,
+//         cs.approved_status AS status,
+//         cs.open_time,
+//         cs.close_time,
+//         cs.type AS usageType,
+//         cs.user_type AS addedByType,
+//         cs.landmark AS landMark,
+
+
+//         n.name AS networkName,
+
+//         CONCAT(cu.first_name, ' ', cu.last_name) AS userName,
+
+//         c.id AS connectorId,
+//         ct.id AS chargerTypeId,
+//         ct.name AS chargerName,
+//         ct.type AS chargerType,
+//         ct.max_power AS powerRating,
+//         c.no_of_connectors,
+//         c.price_per_khw,
+
+//         lp.eVolts,
+//         a.path AS photoPath
+
+//       FROM charging_station cs
+//       LEFT JOIN network n ON n.id = cs.network_id
+//       LEFT JOIN customer cu ON cu.id = cs.created_by
+//       LEFT JOIN charging_point cp ON cp.station_id = cs.id
+//       LEFT JOIN connector c ON c.charge_point_id = cp.id
+//       LEFT JOIN charger_types ct ON ct.id = c.charger_type_id
+//       LEFT JOIN (
+//         SELECT station_id, SUM(points) AS eVolts
+//         FROM loyalty_points
+//         WHERE approved_status = 'APPROVED'
+//         GROUP BY station_id
+//       ) lp ON lp.station_id = cs.id
+//       LEFT JOIN attachment a ON a.station_id = cs.id
+//       WHERE cs.id IN (?)
+//       ORDER BY cs.created_at DESC
+//       `,
+//       [stationIds]
+//     );
+
+//     const stationMap = new Map();
+
+//     for (const r of rows) {
+//       if (!stationMap.has(r.id)) {
+//         stationMap.set(r.id, {
+//           id: r.id,
+//           stationName: r.stationName,
+//           stationNumber: `CS-${r.id}`,
+//           latitude: r.latitude,
+//           longitude: r.longitude,
+//           networkName: r.networkName,
+//           userName: r.userName,
+//           addedByType: r.addedByType,
+//           contactNumber: r.contactNumber,
+//           usageType: r.usageType === "PUBLIC" ? "Public" : "Private",
+//           landMark: r.landMark || "-",
+//           operationalHours:
+//             r.open_time && r.close_time
+//               ? `${r.open_time} - ${r.close_time}`
+//               : "-",
+//           status:
+//             r.status === "APPROVED"
+//               ? "Approved"
+//               : r.status === "REJECTED"
+//               ? "Rejected"
+//               : "Pending",
+//           submissionDate: r.submissionDate,
+//           approvalDate: r.status === "APPROVED" ? r.approvalDate : null,
+//           photos: [],
+//           connectors: [],
+//           eVolts: r.eVolts || 0
+//         });
+//       }
+
+//       const station = stationMap.get(r.id);
+
+//       if (r.photoPath && !station.photos.includes(r.photoPath)) {
+//         station.photos.push(r.photoPath);
+//       }
+
+//       if (r.connectorId && !station.connectors.find(c => c.id === r.connectorId)) {
+//         station.connectors.push({
+//           id: r.connectorId,
+//           chargerTypeId: r.chargerTypeId,
+//           type: r.chargerType,
+//           name: r.chargerName,
+//           count: r.no_of_connectors || 0,
+//           powerRating: r.powerRating ? `${r.powerRating} kW` : "-",
+//           tariff: r.price_per_khw ? `₹${r.price_per_khw}/kWh` : "-"
+//         });
+//       }
+//     }
+
+//     res.json({
+//       data: Array.from(stationMap.values()),
+//       pagination: { total, page, limit }
+//     });
+
+//   } catch (err) {
+//     console.error("GET /stations ERROR:", err);
+//     res.status(500).json({ message: err.message });
+//   }
+// });
 
 /* =====================================================
    PUT /api/stations/:id
