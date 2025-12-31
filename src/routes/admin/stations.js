@@ -34,7 +34,9 @@ router.get("/", async (req, res) => {
 
     const whereSQL = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-    /* ---------- TOTAL COUNT ---------- */
+    /**
+     * TOTAL COUNT
+     */
     const [[{ total }]] = await db.query(
       `
       SELECT COUNT(*) AS total
@@ -44,7 +46,9 @@ router.get("/", async (req, res) => {
       params
     );
 
-    /* ---------- STEP 1: FETCH STATION IDS ---------- */
+    /**
+     * STEP 1: FETCH STATION IDS (PAGINATION SAFE)
+     */
     const [stationIdRows] = await db.query(
       `
       SELECT cs.id
@@ -65,7 +69,9 @@ router.get("/", async (req, res) => {
       });
     }
 
-    /* ---------- STEP 2: FETCH FULL DATA ---------- */
+    /**
+     * STEP 2: FETCH FULL DATA
+     */
     const [rows] = await db.query(
       `
       SELECT
@@ -77,7 +83,6 @@ router.get("/", async (req, res) => {
         cs.created_at AS submissionDate,
         cs.updated_at AS approvalDate,
         cs.approved_status AS status,
-        cs.reason AS rejectionReason,
         cs.open_time,
         cs.close_time,
         cs.type AS usageType,
@@ -98,30 +103,21 @@ router.get("/", async (req, res) => {
         c.no_of_connectors,
         c.price_per_khw,
 
-        /* ✅ LOYALTY POINTS (MATCH station_id + customer_id) */
         lp.eVolts,
-
         a.path AS photoPath
 
       FROM charging_station cs
-
       LEFT JOIN network n ON n.id = cs.network_id
       LEFT JOIN customer cu ON cu.id = cs.created_by
       LEFT JOIN charging_point cp ON cp.station_id = cs.id
       LEFT JOIN connector c ON c.charge_point_id = cp.id
       LEFT JOIN charger_types ct ON ct.id = c.charger_type_id
-
       LEFT JOIN (
-        SELECT
-          station_id,
-          customer_id,
-          SUM(points) AS eVolts
+        SELECT station_id, SUM(points) AS eVolts
         FROM loyalty_points
         WHERE approved_status = 'APPROVED'
-        GROUP BY station_id, customer_id
+        GROUP BY station_id
       ) lp ON lp.station_id = cs.id
-           AND lp.customer_id = cs.created_by
-
       LEFT JOIN attachment a ON a.station_id = cs.id
 
       WHERE cs.id IN (?)
@@ -130,7 +126,9 @@ router.get("/", async (req, res) => {
       [stationIds]
     );
 
-    /* ---------- MERGE + DEDUP ---------- */
+    /**
+     * MERGE + DEDUP
+     */
     const stationMap = new Map();
 
     for (const r of rows) {
@@ -158,12 +156,9 @@ router.get("/", async (req, res) => {
               : "Pending",
           submissionDate: r.submissionDate,
           approvalDate: r.status === "APPROVED" ? r.approvalDate : null,
-
-          reason: r.rejectionReason || "-",
-
           photos: [],
           connectors: [],
-          eVolts: r.eVolts || 0   // ✅ SENT TO FRONTEND
+          eVolts: r.eVolts || 0
         });
       }
 
@@ -218,6 +213,8 @@ router.put("/:id", async (req, res) => {
     const {
       action,
       reason,
+      addedByType,
+      usageType,
       stationName,
       latitude,
       longitude,
@@ -307,6 +304,8 @@ router.put("/:id", async (req, res) => {
         UPDATE charging_station
         SET name = ?,
             latitude = ?,
+            type = ?,
+            user_type = ?, 
             longitude = ?,
             mobile = ?,
             open_time = ?,
@@ -317,6 +316,8 @@ router.put("/:id", async (req, res) => {
         [
           stationName,
           latitude,
+          addedByType,
+          usageType,
           longitude,
           contactNumber,
           open_time,
