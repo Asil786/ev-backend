@@ -86,14 +86,9 @@ router.get("/", async (req, res) => {
         cs.open_time,
         cs.close_time,
         cs.type AS usageType,
+        cs.user_type AS addedByType,
 
         n.name AS networkName,
-
-        CONCAT(cu.first_name, ' ', cu.last_name) AS userName,
-        CASE
-          WHEN cu.name_type = 'IS_VANGUARD' THEN 'CPO'
-          ELSE 'EV Owner'
-        END AS addedByType,
 
         c.id AS connectorId,
         ct.id AS chargerTypeId,
