@@ -199,6 +199,193 @@ router.get("/", async (req, res) => {
   }
 });
 
+// /**
+//  * =====================================================
+//  * PUT /api/stations/:id
+//  * =====================================================
+//  */
+// router.put("/:id", async (req, res) => {
+//   const connection = await db.getConnection();
+
+//   try {
+//     const { id } = req.params;
+//     const {
+//       action,
+//       reason,
+//       addedByType,
+//       usageType,
+//       stationType,
+//       stationName,
+//       latitude,
+//       longitude,
+//       contactNumber,
+//       open_time,
+//       close_time,
+//       connectors = []
+//     } = req.body;
+
+//     if (!action) {
+//       return res.status(400).json({ message: "action is required" });
+//     }
+
+//     await connection.beginTransaction();
+
+//     /**
+//      * APPROVE
+//      */
+//     if (action === "APPROVE") {
+//       await connection.query(
+//         `
+//         UPDATE charging_station
+//         SET verified = 1,
+//             approved_status = 'APPROVED',
+//             reason = NULL,
+//             updated_at = NOW()
+//         WHERE id = ?
+//         `,
+//         [id]
+//       );
+
+//       await connection.query(
+//         `
+//         UPDATE loyalty_points
+//         SET approved_status = 'APPROVED'
+//         WHERE station_id = ?
+//           AND approved_status = 'PENDING'
+//         `,
+//         [id]
+//       );
+
+//       await connection.commit();
+//       return res.json({ message: "Station approved" });
+//     }
+
+//     /**
+//      * REJECT
+//      */
+//     if (action === "REJECT") {
+//       const rejectReason =
+//         typeof reason === "string" && reason.trim()
+//           ? reason.trim()
+//           : null;
+
+//       await connection.query(
+//         `
+//         UPDATE charging_station
+//         SET verified = 0,
+//             approved_status = 'REJECTED',
+//             reason = ?,
+//             updated_at = NOW()
+//         WHERE id = ?
+//         `,
+//         [rejectReason, id]
+//       );
+
+//       await connection.query(
+//         `
+//         UPDATE loyalty_points
+//         SET approved_status = 'REJECTED'
+//         WHERE station_id = ?
+//           AND approved_status = 'PENDING'
+//         `,
+//         [id]
+//       );
+
+//       await connection.commit();
+//       return res.json({ message: "Station rejected" });
+//     }
+
+//     /**
+//      * SAVE
+//      */
+//     if (action === "SAVE") {
+//         await connection.query(
+//           `
+//           UPDATE charging_station
+//           SET name = ?,
+//               landmark = ?,
+//               latitude = ?,
+//               type = ?,
+//               user_type = ?,
+//               longitude = ?,
+//               mobile = ?,
+//               open_time = ?,
+//               close_time = ?,
+//               updated_at = NOW()
+//           WHERE id = ?
+//           `,
+//           [
+//             stationName,
+//             stationType,
+//             latitude,
+//             usageType,
+//             addedByType,
+//             longitude,
+//             contactNumber,
+//             open_time,
+//             close_time,
+//             id
+//           ]
+//         );
+
+//       const [[cp]] = await connection.query(
+//         `SELECT id FROM charging_point WHERE station_id = ? LIMIT 1`,
+//         [id]
+//       );
+
+//       let chargePointId = cp?.id;
+//       if (!chargePointId) {
+//         const [insert] = await connection.query(
+//           `INSERT INTO charging_point (station_id, status) VALUES (?, 1)`,
+//           [id]
+//         );
+//         chargePointId = insert.insertId;
+//       }
+
+//       await connection.query(
+//         `DELETE FROM connector WHERE charge_point_id = ?`,
+//         [chargePointId]
+//       );
+
+//       for (const c of connectors) {
+//         await connection.query(
+//           `
+//           INSERT INTO connector (
+//             charge_point_id,
+//             charger_type_id,
+//             no_of_connectors,
+//             power,
+//             price_per_khw,
+//             status,
+//             created_at
+//           )
+//           VALUES (?, ?, ?, ?, ?, 1, NOW())
+//           `,
+//           [
+//             chargePointId,
+//             c.chargerTypeId,
+//             c.count,
+//             c.powerRating ? parseFloat(c.powerRating) : null,
+//             c.tariff ? parseFloat(c.tariff) : null
+//           ]
+//         );
+//       }
+
+//       await connection.commit();
+//       return res.json({ message: "Station updated successfully" });
+//     }
+
+//     return res.status(400).json({ message: "Invalid action" });
+
+//   } catch (err) {
+//     await connection.rollback();
+//     console.error("PUT /stations ERROR:", err);
+//     res.status(500).json({ message: err.message });
+//   } finally {
+//     connection.release();
+//   }
+// });
+
 /**
  * =====================================================
  * PUT /api/stations/:id
@@ -221,7 +408,12 @@ router.put("/:id", async (req, res) => {
       contactNumber,
       open_time,
       close_time,
-      connectors = []
+      connectors = [],
+
+      // 🔹 network fields from frontend
+      networkId,
+      networkName,
+      networkStatus
     } = req.body;
 
     if (!action) {
@@ -230,9 +422,11 @@ router.put("/:id", async (req, res) => {
 
     await connection.beginTransaction();
 
-    /**
-     * APPROVE
-     */
+
+    
+//     /**
+//      * APPROVE
+//      */
     if (action === "APPROVE") {
       await connection.query(
         `
@@ -299,35 +493,110 @@ router.put("/:id", async (req, res) => {
      * SAVE
      */
     if (action === "SAVE") {
-        await connection.query(
+      /* ---------------- STATION UPDATE ---------------- */
+      await connection.query(
+        `
+        UPDATE charging_station
+        SET name = ?,
+            landmark = ?,
+            latitude = ?,
+            type = ?,
+            user_type = ?,
+            longitude = ?,
+            mobile = ?,
+            open_time = ?,
+            close_time = ?,
+            updated_at = NOW()
+        WHERE id = ?
+        `,
+        [
+          stationName,
+          stationType,
+          latitude,
+          usageType,
+          addedByType,
+          longitude,
+          contactNumber,
+          open_time,
+          close_time,
+          id
+        ]
+      );
+
+      /* ---------------- NETWORK LOGIC ---------------- */
+      let finalNetworkId = null;
+
+      // CASE 1: network already active
+      if (networkStatus === 1) {
+        finalNetworkId = networkId;
+      }
+
+      // CASE 2: network inactive → merge duplicates
+      if (networkStatus === 0 && networkName) {
+        const [networks] = await connection.query(
           `
-          UPDATE charging_station
-          SET name = ?,
-              landmark = ?,
-              latitude = ?,
-              type = ?,
-              user_type = ?,
-              longitude = ?,
-              mobile = ?,
-              open_time = ?,
-              close_time = ?,
-              updated_at = NOW()
-          WHERE id = ?
+          SELECT id, created_at
+          FROM network
+          WHERE name = ?
+          ORDER BY created_at ASC
           `,
-          [
-            stationName,
-            stationType,
-            latitude,
-            usageType,
-            addedByType,
-            longitude,
-            contactNumber,
-            open_time,
-            close_time,
-            id
-          ]
+          [networkName]
         );
 
+        if (networks.length > 0) {
+          finalNetworkId = networks[0].id; // oldest → keep
+
+          // delete duplicates
+          for (let i = 1; i < networks.length; i++) {
+            await connection.query(
+              `
+              UPDATE charging_station
+              SET network_id = ?
+              WHERE network_id = ?
+              `,
+              [finalNetworkId, networks[i].id]
+            );
+
+            await connection.query(
+              `DELETE FROM network WHERE id = ?`,
+              [networks[i].id]
+            );
+          }
+
+          // activate kept network
+          await connection.query(
+            `
+            UPDATE network
+            SET status = 1,
+                name = ?,
+                updated_at = NOW()
+            WHERE id = ?
+            `,
+            [networkName, finalNetworkId]
+          );
+        }
+      }
+
+      // link station → network
+      if (finalNetworkId) {
+        const [[station]] = await connection.query(
+          `SELECT network_id FROM charging_station WHERE id = ? LIMIT 1`,
+          [id]
+        );
+
+        if (!station.network_id || station.network_id !== finalNetworkId) {
+          await connection.query(
+            `
+            UPDATE charging_station
+            SET network_id = ?
+            WHERE id = ?
+            `,
+            [finalNetworkId, id]
+          );
+        }
+      }
+
+      /* ---------------- CONNECTORS ---------------- */
       const [[cp]] = await connection.query(
         `SELECT id FROM charging_point WHERE station_id = ? LIMIT 1`,
         [id]
