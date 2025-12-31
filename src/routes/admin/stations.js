@@ -142,7 +142,7 @@ router.get("/", async (req, res) => {
           addedByType: r.addedByType,
           contactNumber: r.contactNumber,
           usageType: r.usageType === "PUBLIC" ? "Public" : "Private",
-          landMark: r.landMark,
+          landMark: r.landMark || "-",
           operationalHours:
             r.open_time && r.close_time
               ? `${r.open_time} - ${r.close_time}`
