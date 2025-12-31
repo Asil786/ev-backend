@@ -87,6 +87,7 @@ router.get("/", async (req, res) => {
         cs.close_time,
         cs.type AS usageType,
         cs.user_type AS addedByType,
+        cs.landmark AS landMark,
 
         n.name AS networkName,
 
