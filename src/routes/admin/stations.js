@@ -98,21 +98,30 @@ router.get("/", async (req, res) => {
         c.no_of_connectors,
         c.price_per_khw,
 
+        /* ✅ LOYALTY POINTS (MATCH station_id + customer_id) */
         lp.eVolts,
+
         a.path AS photoPath
 
       FROM charging_station cs
+
       LEFT JOIN network n ON n.id = cs.network_id
       LEFT JOIN customer cu ON cu.id = cs.created_by
       LEFT JOIN charging_point cp ON cp.station_id = cs.id
       LEFT JOIN connector c ON c.charge_point_id = cp.id
       LEFT JOIN charger_types ct ON ct.id = c.charger_type_id
+
       LEFT JOIN (
-        SELECT station_id, SUM(points) AS eVolts
+        SELECT
+          station_id,
+          customer_id,
+          SUM(points) AS eVolts
         FROM loyalty_points
         WHERE approved_status = 'APPROVED'
-        GROUP BY station_id
+        GROUP BY station_id, customer_id
       ) lp ON lp.station_id = cs.id
+           AND lp.customer_id = cs.created_by
+
       LEFT JOIN attachment a ON a.station_id = cs.id
 
       WHERE cs.id IN (?)
@@ -150,11 +159,11 @@ router.get("/", async (req, res) => {
           submissionDate: r.submissionDate,
           approvalDate: r.status === "APPROVED" ? r.approvalDate : null,
 
-          reason: r.rejectionReason || "-",   // ✅ SENT TO FRONTEND
+          reason: r.rejectionReason || "-",
 
           photos: [],
           connectors: [],
-          eVolts: r.eVolts || 0
+          eVolts: r.eVolts || 0   // ✅ SENT TO FRONTEND
         });
       }
 
@@ -214,8 +223,7 @@ router.put("/:id", async (req, res) => {
       longitude,
       contactNumber,
       open_time,
-      close_time,
-      connectors = []
+      close_time
     } = req.body;
 
     if (!action) {

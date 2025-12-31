@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import customerRoutes from "./src/routes/admin/customers.js";
 import stationRoutes from "./src/routes/admin/stations.js";
 import tripRoutes from "./src/routes/admin/trips.js";
+import authRoutes from "./src/routes/admin/auth.js";
 
 dotenv.config();
 const app = express();
@@ -13,7 +14,8 @@ app.use(express.json());
 app.use("/api/customers", customerRoutes);
 app.use("/api/stations", stationRoutes);
 app.use("/api/trips", tripRoutes);
+app.use("/api/auth/vendor", authRoutes);
 
-app.listen(process.env.URL_BACKEND,() => {
+app.listen(process.env.PORT || process.env.URL_BACKEND,() => {
   console.log("Backend running");
 });
