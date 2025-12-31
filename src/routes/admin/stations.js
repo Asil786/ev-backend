@@ -299,32 +299,32 @@ router.put("/:id", async (req, res) => {
      * SAVE
      */
     if (action === "SAVE") {
-      await connection.query(
-        `
-        UPDATE charging_station
-        SET name = ?,
-            latitude = ?,
-            type = ?,
-            user_type = ?,
-            longitude = ?,
-            mobile = ?,
-            open_time = ?,
-            close_time = ?,
-            updated_at = NOW()
-        WHERE id = ?
-        `,
-        [
-          stationName,
-          latitude,
-          usageType,
-          addedByType,
-          longitude,
-          contactNumber,
-          open_time,
-          close_time,
-          id
-        ]
-      );
+        await connection.query(
+          `
+          UPDATE charging_station
+          SET name = ?,
+              latitude = ?,
+              type = ?,
+              user_type = ?,
+              longitude = ?,
+              mobile = ?,
+              open_time = ?,
+              close_time = ?,
+              updated_at = NOW()
+          WHERE id = ?
+          `,
+          [
+            stationName,
+            latitude,
+            usageType,
+            addedByType,
+            longitude,
+            contactNumber,
+            open_time,
+            close_time,
+            id
+          ]
+        );
 
       const [[cp]] = await connection.query(
         `SELECT id FROM charging_point WHERE station_id = ? LIMIT 1`,
