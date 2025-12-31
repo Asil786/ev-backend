@@ -305,7 +305,7 @@ router.put("/:id", async (req, res) => {
         SET name = ?,
             latitude = ?,
             type = ?,
-            user_type = ?, 
+            user_type = ?,
             longitude = ?,
             mobile = ?,
             open_time = ?,
@@ -316,8 +316,8 @@ router.put("/:id", async (req, res) => {
         [
           stationName,
           latitude,
-          addedByType,
           usageType,
+          addedByType,
           longitude,
           contactNumber,
           open_time,
