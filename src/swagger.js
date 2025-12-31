@@ -59,7 +59,6 @@ const options = {
                         },
                         subscription: {
                             type: 'string',
-                            enum: ['Basic', 'Gold', 'Premium'],
                             example: 'Premium'
                         },
                         vehicleType: {
@@ -116,6 +115,48 @@ const options = {
                             type: 'string',
                             enum: ['Yes', 'No'],
                             example: 'Yes'
+                        },
+                        vehicles: {
+                            type: 'array',
+                            description: 'Array of all vehicles owned by this customer',
+                            items: {
+                                $ref: '#/components/schemas/Vehicle'
+                            }
+                        }
+                    }
+                },
+                Vehicle: {
+                    type: 'object',
+                    properties: {
+                        vehicleRegDate: {
+                            type: 'string',
+                            format: 'date-time',
+                            example: '2024-01-20T14:00:00.000Z'
+                        },
+                        registrationNumber: {
+                            type: 'string',
+                            nullable: true,
+                            example: 'MH12AB1234'
+                        },
+                        vehicleType: {
+                            type: 'string',
+                            nullable: true,
+                            example: 'Car'
+                        },
+                        manufacturer: {
+                            type: 'string',
+                            nullable: true,
+                            example: 'Tata'
+                        },
+                        vehicleModel: {
+                            type: 'string',
+                            nullable: true,
+                            example: 'Nexon EV'
+                        },
+                        vehicleVariant: {
+                            type: 'string',
+                            nullable: true,
+                            example: 'Max'
                         }
                     }
                 },
