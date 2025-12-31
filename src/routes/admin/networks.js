@@ -52,4 +52,67 @@ router.get("/", async (req, res) => {
   }
 });
 
+
+/**
+ * =====================================================
+ * DELETE /api/networks/:id
+ * Only allow delete if status = 0
+ * =====================================================
+ */
+router.delete("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        message: "Network id is required"
+      });
+    }
+
+    // Check network existence and status
+    const [[network]] = await db.query(
+      `
+      SELECT id, status
+      FROM network
+      WHERE id = ?
+      LIMIT 1
+      `,
+      [id]
+    );
+
+    if (!network) {
+      return res.status(404).json({
+        message: "Network not found"
+      });
+    }
+
+    // if (network.status !== 0) {
+    //   return res.status(400).json({
+    //     message: "Only inactive networks (status = 0) can be deleted"
+    //   });
+    // }
+
+    // Delete network
+    await db.query(
+      `
+      DELETE FROM network
+      WHERE id = ?
+        AND status = 0
+      `,
+      [id]
+    );
+
+    return res.json({
+      message: "Network deleted successfully"
+    });
+
+  } catch (err) {
+    console.error("DELETE /networks ERROR:", err);
+    return res.status(500).json({
+      message: "Internal server error"
+    });
+  }
+});
+
+
 export default router;
