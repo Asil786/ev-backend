@@ -6,8 +6,8 @@ import xlsx from "xlsx";
 
 const router = express.Router();
 
-// Configure multer for file uploads
-const upload = multer({ dest: "uploads/" });
+// Configure multer for file uploads - use memory storage for serverless compatibility
+const upload = multer({ storage: multer.memoryStorage() });
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -1506,7 +1506,8 @@ router.post("/mass-upload", upload.single("file"), async (req, res) => {
         }
 
         // Read the uploaded file
-        const workbook = xlsx.readFile(req.file.path);
+        // Read the uploaded file from buffer
+        const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
         const sheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[sheetName];
         const data = xlsx.utils.sheet_to_json(worksheet);
