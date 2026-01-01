@@ -27,7 +27,7 @@ app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customSiteTitle: "EVJoints Admin API Docs"
 }));
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.URL_BACKEND || 4000;
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   app.listen(PORT, () => {
