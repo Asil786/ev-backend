@@ -498,6 +498,90 @@
         }
       }
     },
+    "/api/stations/download": {
+      "get": {
+        "summary": "Download station submissions as CSV with connector-level rows",
+        "description": "Downloads all station submissions matching the current filters as a CSV file. Each connector gets its own row, so stations with multiple connectors will appear multiple times. Respects all active filters (status, date range, search).",
+        "tags": [
+          "Stations"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "All",
+                "Pending",
+                "Approved",
+                "Rejected"
+              ]
+            },
+            "description": "Filter by approval status"
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Filter stations submitted on or after this date (YYYY-MM-DD)",
+            "example": "2024-01-01"
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Filter stations submitted on or before this date (YYYY-MM-DD)",
+            "example": "2024-12-31"
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search by station name, landmark, contact number, or station ID",
+            "example": "Mumbai Central"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CSV file download with connector-level rows",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "example": "Station ID,Submission Date,Submission Time,Added By Type,Customer Name,Customer Phone,Latitude,Longitude,Network Name,Station Name,Station Number,Connector Type,Connector Name,Connector Count,Power Rating,Tariff,Usage Type,Station Type,Operational Hours,Photo Count,Status,Status Reason,EVolts,Approval Date,Approval Time\n123,15/01/2024,10:30,CPO,John Doe,9876543210,19.076,72.8777,Tata Power,Mumbai Central Charging Hub,CS-123,DC,CCS2,2,60 kW,₹12/kWh,Public,Shopping Mall,09:00 - 21:00,3,Approved,-,500,20/01/2024,14:00"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Database connection failed"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/stations/{id}": {
       "put": {
         "summary": "Update station details or status",

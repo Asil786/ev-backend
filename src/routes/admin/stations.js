@@ -505,6 +505,227 @@ router.get("/", async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/stations/download:
+ *   get:
+ *     summary: Download station submissions as CSV with connector-level rows
+ *     description: |
+ *       Downloads all station submissions matching the current filters as a CSV file.
+ *       Each connector gets its own row, so stations with multiple connectors will appear multiple times.
+ *       Respects all active filters (status, date range, search).
+ *     tags:
+ *       - Stations
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [All, Pending, Approved, Rejected]
+ *         description: Filter by approval status
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter stations submitted on or after this date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter stations submitted on or before this date
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term
+ *     responses:
+ *       200:
+ *         description: CSV file download
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/download", async (req, res) => {
+  try {
+    const { status, startDate, endDate, search } = req.query;
+
+    // Build WHERE clause using same filters as main endpoint
+    const { whereSQL, params } = buildWhereClause({ status, startDate, endDate, search });
+
+    // Fetch ALL matching stations (no pagination for download)
+    const [stationIdRows] = await db.query(
+      `
+      SELECT cs.id
+      FROM charging_station cs
+      ${whereSQL}
+      ORDER BY cs.created_at DESC
+      `,
+      params
+    );
+
+    const stationIds = stationIdRows.map((r) => r.id);
+
+    // If no stations found, return empty CSV
+    if (!stationIds.length) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="station_submissions.csv"');
+      return res.send('No data found');
+    }
+
+    // Fetch full station details
+    const rows = await fetchStationDetails(stationIds);
+
+    // Build CSV with connector-level rows
+    const csvHeaders = [
+      'Station ID',
+      'Submission Date',
+      'Submission Time',
+      'Added By Type',
+      'Customer Name',
+      'Customer Phone',
+      'Latitude',
+      'Longitude',
+      'Network Name',
+      'Station Name',
+      'Station Number',
+      'Connector Type',
+      'Connector Name',
+      'Connector Count',
+      'Power Rating',
+      'Tariff',
+      'Usage Type',
+      'Station Type',
+      'Operational Hours',
+      'Photo Count',
+      'Status',
+      'Status Reason',
+      'EVolts',
+      'Approval Date',
+      'Approval Time'
+    ];
+
+    const csvRows = [];
+
+    // Group by station first
+    const stationMap = new Map();
+    for (const row of rows) {
+      if (!stationMap.has(row.id)) {
+        stationMap.set(row.id, {
+          ...mapStationRow(row),
+          rawConnectors: [],
+          photoCount: 0
+        });
+      }
+
+      const station = stationMap.get(row.id);
+
+      // Track photos
+      if (row.photoPath && !station.photos.includes(row.photoPath)) {
+        station.photos.push(row.photoPath);
+        station.photoCount++;
+      }
+
+      // Track connectors with full details
+      if (row.connectorId && !station.rawConnectors.find(c => c.id === row.connectorId)) {
+        station.rawConnectors.push({
+          id: row.connectorId,
+          type: row.chargerType || '-',
+          name: row.chargerName || '-',
+          count: row.no_of_connectors || 0,
+          powerRating: row.powerRating ? `${row.powerRating} kW` : '-',
+          tariff: row.price_per_khw ? `₹${row.price_per_khw}/kWh` : '-'
+        });
+      }
+    }
+
+    // Generate CSV rows - one per connector
+    for (const station of stationMap.values()) {
+      const submissionDate = new Date(station.submissionDate);
+      const approvalDate = station.approvalDate ? new Date(station.approvalDate) : null;
+
+      const baseRow = [
+        station.id,
+        submissionDate.toLocaleDateString('en-GB'),
+        submissionDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+        station.addedByType || '-',
+        station.userName || '-',
+        station.contactNumber || '-',
+        station.latitude,
+        station.longitude,
+        station.networkName || '-',
+        station.stationName,
+        station.stationNumber,
+        // Connector fields will be added per row
+      ];
+
+      const endRow = [
+        station.usageType,
+        station.stationType,
+        station.operationalHours,
+        station.photoCount,
+        station.status,
+        station.statusReason || '-',
+        station.eVolts,
+        approvalDate ? approvalDate.toLocaleDateString('en-GB') : '-',
+        approvalDate ? approvalDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '-'
+      ];
+
+      // If station has connectors, create one row per connector
+      if (station.rawConnectors.length > 0) {
+        for (const connector of station.rawConnectors) {
+          csvRows.push([
+            ...baseRow,
+            connector.type,
+            connector.name,
+            connector.count,
+            connector.powerRating,
+            connector.tariff,
+            ...endRow
+          ]);
+        }
+      } else {
+        // No connectors - single row with empty connector fields
+        csvRows.push([
+          ...baseRow,
+          '-', // connector type
+          '-', // connector name
+          '0', // connector count
+          '-', // power rating
+          '-', // tariff
+          ...endRow
+        ]);
+      }
+    }
+
+    // Build CSV content
+    const csvContent = [
+      csvHeaders.join(','),
+      ...csvRows.map(row => row.map(cell => {
+        // Escape cells containing commas, quotes, or newlines
+        const cellStr = String(cell);
+        if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+          return `"${cellStr.replace(/"/g, '""')}"`;
+        }
+        return cellStr;
+      }).join(','))
+    ].join('\n');
+
+    // Send CSV file
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="station_submissions.csv"');
+    res.send('\uFEFF' + csvContent); // Add BOM for Excel compatibility
+
+  } catch (err) {
+    console.error("GET /stations/download ERROR:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // ============================================================================
 // PUT ENDPOINT HELPER FUNCTIONS
 // ============================================================================

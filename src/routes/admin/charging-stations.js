@@ -482,6 +482,261 @@ router.get("/", async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /api/charging-stations/download:
+ *   get:
+ *     summary: Download charging stations as CSV with connector-level rows
+ *     description: Downloads all approved charging stations matching the current filters as a CSV file. Each connector gets its own row. Respects all active filters.
+ *     tags:
+ *       - Charging Stations
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [All, Active, Inactive]
+ *         description: Filter by operational status
+ *       - in: query
+ *         name: usageType
+ *         schema:
+ *           type: string
+ *           enum: [All, Public, Private]
+ *         description: Filter by usage type
+ *       - in: query
+ *         name: networkId
+ *         schema:
+ *           type: string
+ *         description: Filter by network ID
+ *       - in: query
+ *         name: addedBy
+ *         schema:
+ *           type: string
+ *           enum: [All, EVJoints, Users]
+ *         description: Filter by who added the station
+ *       - in: query
+ *         name: chargerType
+ *         schema:
+ *           type: string
+ *           enum: [All, AC, DC]
+ *         description: Filter by charger type
+ *       - in: query
+ *         name: stationType
+ *         schema:
+ *           type: string
+ *         description: Filter by station type
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter stations created on or after this date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter stations created on or before this date
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term
+ *     responses:
+ *       200:
+ *         description: CSV file download
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/download", async (req, res) => {
+    try {
+        const {
+            status,
+            usageType,
+            networkId,
+            addedBy,
+            chargerType,
+            stationType,
+            startDate,
+            endDate,
+            search
+        } = req.query;
+
+        // Build WHERE clause
+        const { whereSQL, params } = buildWhereClause({
+            status,
+            usageType,
+            networkId,
+            addedBy,
+            chargerType,
+            stationType,
+            startDate,
+            endDate,
+            search
+        });
+
+        // Get ALL station IDs (no pagination)
+        const [stationIdRows] = await db.query(
+            `
+            SELECT cs.id
+            FROM charging_station cs
+            LEFT JOIN network n ON n.id = cs.network_id
+            ${whereSQL}
+            ORDER BY cs.created_at DESC
+            `,
+            params
+        );
+
+        const stationIds = stationIdRows.map((r) => r.id);
+
+        if (!stationIds.length) {
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', 'attachment; filename="charging_stations.csv"');
+            return res.send('No data found');
+        }
+
+        // Fetch full station details
+        const rows = await fetchStationDetails(stationIds);
+
+        // CSV Headers
+        const csvHeaders = [
+            'Station ID',
+            'Submission Date',
+            'Submission Time',
+            'Added By',
+            'Station Name',
+            'Network Name',
+            'Station Contact',
+            'Latitude',
+            'Longitude',
+            'Station Type',
+            'Usage Type',
+            'Operational Hours',
+            'Operational Status',
+            'Connector Type',
+            'Connector Name',
+            'Connector Count',
+            'Power Rating',
+            'Tariff',
+            'Connector Status',
+            'Photo Count'
+        ];
+
+        const csvRows = [];
+
+        // Group by station first
+        const stationMap = new Map();
+        for (const row of rows) {
+            if (!stationMap.has(row.id)) {
+                stationMap.set(row.id, {
+                    ...mapStationRow(row),
+                    rawConnectors: [],
+                    photoCount: 0
+                });
+            }
+
+            const station = stationMap.get(row.id);
+
+            // Track photos
+            if (row.photoPath && !station.media.includes(row.photoPath)) {
+                station.media.push(row.photoPath);
+                station.photoCount++;
+            }
+
+            // Track connectors with full details
+            if (row.connectorId && !station.rawConnectors.find(c => c.id === row.connectorId)) {
+                station.rawConnectors.push({
+                    id: row.connectorId,
+                    type: row.connectorType || '-',
+                    name: row.connectorName || '-',
+                    count: row.connectorCount || 0,
+                    powerRating: row.powerRating ? `${row.powerRating} kW` : '-',
+                    tariff: row.tariff ? `₹${row.tariff}/kWh` : '-',
+                    status: row.connectorStatus === 1 ? 'Active' : 'Inactive'
+                });
+            }
+        }
+
+        // Generate CSV rows - one per connector
+        for (const station of stationMap.values()) {
+            const submissionDate = new Date(station.submissionTime);
+
+            const baseRow = [
+                station.id,
+                submissionDate.toLocaleDateString('en-GB'),
+                submissionDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+                station.addedBy,
+                station.stationName,
+                station.networkName,
+                station.stationContact,
+                station.latitude,
+                station.longitude,
+                station.stationType,
+                station.usageType,
+                station.operationalHours,
+                station.operationalStatus
+            ];
+
+            const endRow = [
+                station.photoCount
+            ];
+
+            // If station has connectors, create one row per connector
+            if (station.rawConnectors.length > 0) {
+                for (const connector of station.rawConnectors) {
+                    csvRows.push([
+                        ...baseRow,
+                        connector.type,
+                        connector.name,
+                        connector.count,
+                        connector.powerRating,
+                        connector.tariff,
+                        connector.status,
+                        ...endRow
+                    ]);
+                }
+            } else {
+                // No connectors - single row with empty connector fields
+                csvRows.push([
+                    ...baseRow,
+                    '-', // connector type
+                    '-', // connector name
+                    '0', // connector count
+                    '-', // power rating
+                    '-', // tariff
+                    '-', // connector status
+                    ...endRow
+                ]);
+            }
+        }
+
+        // Build CSV content
+        const csvContent = [
+            csvHeaders.join(','),
+            ...csvRows.map(row => row.map(cell => {
+                const cellStr = String(cell);
+                if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+                    return `"${cellStr.replace(/"/g, '""')}"`;
+                }
+                return cellStr;
+            }).join(','))
+        ].join('\n');
+
+        // Send CSV file
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="charging_stations.csv"');
+        res.send('\uFEFF' + csvContent);
+
+    } catch (err) {
+        console.error("GET /charging-stations/download ERROR:", err);
+        res.status(500).json({ message: err.message });
+    }
+});
+
 // ============================================================================
 // POST ENDPOINT - Add New Station
 // ============================================================================

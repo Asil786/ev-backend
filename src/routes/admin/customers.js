@@ -451,4 +451,180 @@ router.get("/", async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/customers/download:
+ *   get:
+ *     summary: Download customers as CSV with vehicle-level rows
+ *     description: Downloads all customers matching the current filters as a CSV file. Each vehicle gets its own row, so customers with multiple vehicles will appear multiple times. Respects date range filters and sort order.
+ *     tags:
+ *       - Customers
+ *     parameters:
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [id, firstName, lastName, email, phone, customerRegDate, vehicleRegDate, registrationNumber, vehicleType, manufacturer, vehicleModel, subscription]
+ *           default: customerRegDate
+ *         description: Field to sort by
+ *       - in: query
+ *         name: order
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: desc
+ *         description: Sort order
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter customers registered on or after this date
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter customers registered on or before this date
+ *     responses:
+ *       200:
+ *         description: CSV file download
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ *       500:
+ *         description: Internal server error
+ */
+router.get("/download", async (req, res) => {
+  try {
+    const { sortColumn, orderDirection } = getSortParams(req.query);
+    const startDate = req.query.startDate || null;
+    const endDate = req.query.endDate || null;
+
+    // Fetch ALL customers (no pagination)
+    const customers = await fetchCustomers(999999, 0, sortColumn, orderDirection, startDate, endDate);
+
+    if (customers.length === 0) {
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="customers.csv"');
+      return res.send('No data found');
+    }
+
+    // Fetch all vehicles
+    const customerIds = customers.map(c => c.id);
+    const vehiclesRows = await fetchVehiclesForCustomers(customerIds);
+    const vehiclesByCustomer = groupVehiclesByCustomer(vehiclesRows);
+
+    // CSV Headers
+    const csvHeaders = [
+      'Customer ID',
+      'First Name',
+      'Last Name',
+      'Email',
+      'Phone',
+      'Customer Reg Date',
+      'Customer Reg Time',
+      'Vehicle Reg Date',
+      'Vehicle Reg Time',
+      'Registration Number',
+      'Vehicle Type',
+      'Manufacturer',
+      'Vehicle Model',
+      'Vehicle Variant',
+      'Device Brand',
+      'Device Model',
+      'Device Platform',
+      'App Version',
+      'Navigation',
+      'Trip',
+      'Check In',
+      'Subscription'
+    ];
+
+    const csvRows = [];
+
+    // Generate CSV rows - one per vehicle
+    for (const customer of customers) {
+      const customerVehicles = vehiclesByCustomer[customer.id] || [];
+
+      const customerRegDate = new Date(customer.customer_reg_date);
+
+      const baseRow = [
+        customer.id,
+        customer.first_name || '-',
+        customer.last_name || '-',
+        customer.email || '-',
+        customer.mobile || '-',
+        customerRegDate.toLocaleDateString('en-GB'),
+        customerRegDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+      ];
+
+      const endRow = [
+        customer.device_brand || '-',
+        customer.device_model || '-',
+        customer.device_platform || '-',
+        customer.app_version || '-',
+        customer.has_navigation ? 'Yes' : 'No',
+        customer.has_trip ? 'Yes' : 'No',
+        customer.has_checkin ? 'Yes' : 'No',
+        customer.subscription_name || 'Free'
+      ];
+
+      // If customer has vehicles, create one row per vehicle
+      if (customerVehicles.length > 0) {
+        for (const vehicle of customerVehicles) {
+          const vehicleRegDate = vehicle.vehicleRegDate ? new Date(vehicle.vehicleRegDate) : null;
+
+          csvRows.push([
+            ...baseRow,
+            vehicleRegDate ? vehicleRegDate.toLocaleDateString('en-GB') : '-',
+            vehicleRegDate ? vehicleRegDate.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '-',
+            vehicle.registrationNumber || '-',
+            vehicle.vehicleType || '-',
+            vehicle.manufacturer || '-',
+            vehicle.vehicleModel || '-',
+            vehicle.vehicleVariant || '-',
+            ...endRow
+          ]);
+        }
+      } else {
+        // No vehicles - single row with empty vehicle fields
+        csvRows.push([
+          ...baseRow,
+          '-', // vehicle reg date
+          '-', // vehicle reg time
+          '-', // registration number
+          '-', // vehicle type
+          '-', // manufacturer
+          '-', // vehicle model
+          '-', // vehicle variant
+          ...endRow
+        ]);
+      }
+    }
+
+    // Build CSV content
+    const csvContent = [
+      csvHeaders.join(','),
+      ...csvRows.map(row => row.map(cell => {
+        const cellStr = String(cell);
+        if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+          return `"${cellStr.replace(/"/g, '""')}"`;
+        }
+        return cellStr;
+      }).join(','))
+    ].join('\n');
+
+    // Send CSV file
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="customers.csv"');
+    res.send('\uFEFF' + csvContent);
+
+  } catch (err) {
+    console.error("GET /customers/download ERROR:", err);
+    res.status(500).json({ message: err.message });
+  }
+});
+
 export default router;
