@@ -28,7 +28,10 @@ app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customJs: [
     "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-bundle.js",
     "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-standalone-preset.js"
-  ]
+  ],
+  swaggerOptions: {
+    defaultModelsExpandDepth: -1
+  }
 }));
 
 const PORT = process.env.PORT || 4000;

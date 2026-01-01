@@ -5,16 +5,6 @@
     "version": "1.1.0",
     "description": "API documentation for EVJoints Admin Dashboard backend"
   },
-  "servers": [
-    {
-      "url": "http://localhost:4000",
-      "description": "Development server"
-    },
-    {
-      "url": "https://devevjoints.netlify.app/.netlify/functions/api",
-      "description": "Production server"
-    }
-  ],
   "components": {
     "schemas": {
       "Customer": {
@@ -200,6 +190,101 @@
           }
         }
       },
+      "Trip": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "dateTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "mobileNumber": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "totalKm": {
+            "type": "number"
+          },
+          "stationConnectorCount": {
+            "type": "string"
+          },
+          "chargingStopsCount": {
+            "type": "integer"
+          },
+          "evModel": {
+            "type": "string"
+          },
+          "evVariant": {
+            "type": "string"
+          },
+          "feedback": {
+            "type": "string",
+            "nullable": true
+          },
+          "tripStatus": {
+            "type": "string"
+          },
+          "tripCompletionStatus": {
+            "type": "string"
+          },
+          "hasTripStory": {
+            "type": "string"
+          },
+          "storyStatus": {
+            "type": "string",
+            "nullable": true
+          },
+          "blogLink": {
+            "type": "string",
+            "nullable": true
+          },
+          "approvedBy": {
+            "type": "string"
+          }
+        }
+      },
+      "TripsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Trip"
+            }
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer"
+              },
+              "page": {
+                "type": "integer"
+              },
+              "limit": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
       "Error": {
         "type": "object",
         "properties": {
@@ -326,6 +411,129 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trips": {
+      "get": {
+        "summary": "Get paginated list of trip check-ins",
+        "description": "Retrieves trip records with filtering by status and story presence.",
+        "tags": [
+          "Trips"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 10
+            },
+            "description": "Items per page"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "default": "All"
+            },
+            "description": "Filter by trip status"
+          },
+          {
+            "in": "query",
+            "name": "story",
+            "schema": {
+              "type": "string",
+              "default": "All"
+            },
+            "description": "Filter by story presence"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trips/story/{id}/": {
+      "put": {
+        "summary": "Update trip story status",
+        "tags": [
+          "Trips"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "Approved",
+                      "Rejected"
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "blogLink": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "action",
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
                 }
               }
             }
