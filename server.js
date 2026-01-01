@@ -23,7 +23,12 @@ app.use("/api/networks", networkRoutes);
 // Swagger Documentation
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
   customCss: '.swagger-ui .topbar { display: none }',
-  customSiteTitle: "EVJoints Admin API Docs"
+  customSiteTitle: "EVJoints Admin API Docs",
+  customCssUrl: "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui.min.css",
+  customJs: [
+    "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-bundle.js",
+    "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.15.5/swagger-ui-standalone-preset.js"
+  ]
 }));
 
 const PORT = process.env.PORT || 4000;

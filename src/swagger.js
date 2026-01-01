@@ -14,7 +14,7 @@ const options = {
                 description: 'Development server'
             },
             {
-                url: 'https://ev-backend-six.vercel.app',
+                url: 'https://devevjoints.netlify.app/.netlify/functions/api',
                 description: 'Production server'
             }
         ],
