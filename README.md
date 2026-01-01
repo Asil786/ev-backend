@@ -89,16 +89,16 @@ Create a `.env` file in the root of your project and add the following:
 
 ```env
 # Server Configuration
-PORT=your_port
+PORT=
 
 # Database Connection
-DB_HOST=your_database_host
-DB_USER=your_database_user
-DB_PASSWORD=your_database_password
-DB_NAME=your_database_name
+DB_HOST=
+DB_USER=
+DB_PASSWORD=
+DB_NAME=
 
 # Security
-JWT_SECRET=your_super_secret_key_change_this
+JWT_SECRET=
 ```
 
 ---
@@ -107,7 +107,7 @@ JWT_SECRET=your_super_secret_key_change_this
 
 The backend includes fully integrated Swagger documentation.
 
-- **Local URL**: [http://localhost:4000/docs](http://localhost:4000/docs)
+- **Local URL**: 
 - **Production URL**: `https://<your-netlify-app>/docs`
 
 Use this interface to test endpoints directly from your browser.
