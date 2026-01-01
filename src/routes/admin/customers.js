@@ -45,11 +45,55 @@ function getSortParams(query) {
 
 
 /**
- * Fetches total customer count
+ * Fetches total customer count with optional date filtering
  */
-async function getTotalCustomers() {
+async function getTotalCustomers(startDate = null, endDate = null) {
+  let whereClause = '';
+  const queryParams = [];
+
+  if (startDate && endDate) {
+    whereClause = `
+      WHERE id IN (
+        SELECT MAX(id)
+        FROM customer
+        WHERE created_at BETWEEN ? AND ?
+        GROUP BY mobile
+      )
+    `;
+    queryParams.push(startDate, endDate);
+  } else if (startDate) {
+    whereClause = `
+      WHERE id IN (
+        SELECT MAX(id)
+        FROM customer
+        WHERE created_at >= ?
+        GROUP BY mobile
+      )
+    `;
+    queryParams.push(startDate);
+  } else if (endDate) {
+    whereClause = `
+      WHERE id IN (
+        SELECT MAX(id)
+        FROM customer
+        WHERE created_at <= ?
+        GROUP BY mobile
+      )
+    `;
+    queryParams.push(endDate);
+  } else {
+    whereClause = `
+      WHERE id IN (
+        SELECT MAX(id)
+        FROM customer
+        GROUP BY mobile
+      )
+    `;
+  }
+
   const [[{ total }]] = await db.query(
-    "SELECT COUNT(DISTINCT mobile) AS total FROM customer"
+    `SELECT COUNT(*) AS total FROM customer ${whereClause}`,
+    queryParams
   );
   return total;
 }
@@ -57,7 +101,24 @@ async function getTotalCustomers() {
 /**
  * Fetches customers with their latest vehicle and activity flags
  */
-async function fetchCustomers(limit, offset, sortColumn, orderDirection) {
+async function fetchCustomers(limit, offset, sortColumn, orderDirection, startDate = null, endDate = null) {
+  // Build WHERE clause for date filtering
+  let dateWhereClause = '';
+  const queryParams = [TRIP_STATUS_ACTIVE, TRIP_STATUS_ACTIVE];
+
+  if (startDate && endDate) {
+    dateWhereClause = 'WHERE c.created_at BETWEEN ? AND ?';
+    queryParams.push(startDate, endDate);
+  } else if (startDate) {
+    dateWhereClause = 'WHERE c.created_at >= ?';
+    queryParams.push(startDate);
+  } else if (endDate) {
+    dateWhereClause = 'WHERE c.created_at <= ?';
+    queryParams.push(endDate);
+  }
+
+  queryParams.push(limit, offset);
+
   const [rows] = await db.query(
     `
     SELECT
@@ -146,15 +207,12 @@ async function fetchCustomers(limit, offset, sortColumn, orderDirection) {
     )
     LEFT JOIN subscription_master sm ON sm.id = s.subscription_id
 
+    ${dateWhereClause}
+
     ORDER BY ${sortColumn} ${orderDirection}
     LIMIT ? OFFSET ?
     `,
-    [
-      TRIP_STATUS_ACTIVE,
-      TRIP_STATUS_ACTIVE,
-      limit,
-      offset
-    ]
+    queryParams
   );
 
   return rows;
@@ -263,7 +321,7 @@ function mapCustomerResponse(row, vehiclesByCustomer) {
  * /api/customers:
  *   get:
  *     summary: Get paginated list of customers
- *     description: Retrieves a paginated list of customers with their vehicle information, device details, and subscription status. Supports server-side sorting.
+ *     description: Retrieves a paginated list of customers with their vehicle information, device details, and subscription status. Supports server-side sorting and date range filtering.
  *     tags:
  *       - Customers
  *     parameters:
@@ -296,6 +354,18 @@ function mapCustomerResponse(row, vehiclesByCustomer) {
  *           enum: [asc, desc]
  *           default: desc
  *         description: Sort order (ascending or descending)
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter customers registered on or after this date (YYYY-MM-DD)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter customers registered on or before this date (YYYY-MM-DD)
  *     responses:
  *       200:
  *         description: Successful response with customer data
@@ -347,11 +417,15 @@ router.get("/", async (req, res) => {
     const { page, limit, offset } = getPagination(req.query);
     const { sortColumn, orderDirection } = getSortParams(req.query);
 
-    // 2. Fetch total count
-    const total = await getTotalCustomers();
+    // Extract date filters from query
+    const startDate = req.query.startDate || null;
+    const endDate = req.query.endDate || null;
 
-    // 3. Fetch customers with latest vehicle
-    const customers = await fetchCustomers(limit, offset, sortColumn, orderDirection);
+    // 2. Fetch total count with date filters
+    const total = await getTotalCustomers(startDate, endDate);
+
+    // 3. Fetch customers with latest vehicle and date filters
+    const customers = await fetchCustomers(limit, offset, sortColumn, orderDirection, startDate, endDate);
 
     // 4. Fetch all vehicles for these customers
     const customerIds = customers.map(c => c.id);
