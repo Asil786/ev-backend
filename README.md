@@ -89,7 +89,7 @@ Create a `.env` file in the root of your project and add the following:
 
 ```env
 # Server Configuration
-PORT=4000
+PORT=your_port
 
 # Database Connection
 DB_HOST=your_database_host
