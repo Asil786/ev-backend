@@ -42,3 +42,6 @@ build/
 # Documentation (optional - uncomment if you don't want to commit)
 # SWAGGER_DOCS.md
 # SSR_LOCAL_BACKEND.md
+
+# Netlify
+.netlify
