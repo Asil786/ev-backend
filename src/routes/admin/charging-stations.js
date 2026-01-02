@@ -177,7 +177,7 @@ async function fetchStationDetails(stationIds) {
       ct.id AS chargerTypeId,
       ct.name AS connectorName,
       ct.type AS connectorType,
-      ct.max_power AS powerRating,
+      c.power AS powerRating,
       c.no_of_connectors AS connectorCount,
       c.price_per_khw AS tariff,
       c.status AS connectorStatus,
