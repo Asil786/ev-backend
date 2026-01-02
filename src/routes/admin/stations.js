@@ -718,6 +718,64 @@ router.put("/:id", async (req, res) => {
     }
 
     await connection.beginTransaction();
+if (action === "APPROVE") {
+  await connection.query(
+    `
+    UPDATE charging_station
+    SET verified = 1,
+        approved_status = 'APPROVED',
+        reason = NULL,
+        updated_at = NOW()
+    WHERE id = ?
+    `,
+    [id]
+  );
+
+  await connection.query(
+    `
+    UPDATE loyalty_points
+    SET approved_status = 'APPROVED'
+    WHERE station_id = ?
+      AND approved_status = 'PENDING'
+    `,
+    [id]
+  );
+
+  await connection.commit();
+  return res.json({ message: "Station approved" });
+}
+
+if (action === "REJECT") {
+  const rejectReason =
+    typeof reason === "string" && reason.trim() ? reason.trim() : null;
+
+  await connection.query(
+    `
+    UPDATE charging_station
+    SET verified = 0,
+        approved_status = 'REJECTED',
+        reason = ?,
+        updated_at = NOW()
+    WHERE id = ?
+    `,
+    [rejectReason, id]
+  );
+
+  await connection.query(
+    `
+    UPDATE loyalty_points
+    SET approved_status = 'REJECTED'
+    WHERE station_id = ?
+      AND approved_status = 'PENDING'
+    `,
+    [id]
+  );
+
+  await connection.commit();
+  return res.json({ message: "Station rejected" });
+}
+
+     
 
     if (action === "SAVE") {
       await connection.query(
