@@ -718,9 +718,9 @@ router.put("/:id", async (req, res) => {
     }
 
     await connection.beginTransaction();
-if (action === "APPROVE") {
-  await connection.query(
-    `
+    if (action === "APPROVE") {
+      await connection.query(
+        `
     UPDATE charging_station
     SET verified = 1,
         approved_status = 'APPROVED',
@@ -728,29 +728,54 @@ if (action === "APPROVE") {
         updated_at = NOW()
     WHERE id = ?
     `,
-    [id]
-  );
+        [id]
+      );
 
-  await connection.query(
-    `
-    UPDATE loyalty_points
-    SET approved_status = 'APPROVED'
-    WHERE station_id = ?
-      AND approved_status = 'PENDING'
-    `,
-    [id]
-  );
+      const [[pointRecord]] = await connection.query(
+        `SELECT id FROM loyalty_points WHERE station_id = ?`,
+        [id]
+      );
 
-  await connection.commit();
-  return res.json({ message: "Station approved" });
-}
+      if (pointRecord) {
+        await connection.query(
+          `
+      UPDATE loyalty_points
+      SET approved_status = 'APPROVED'
+      WHERE station_id = ?
+      `,
+          [id]
+        );
+      } else {
+        // Points missing? Insert them now (Backfill/Fix)
+        const [[station]] = await connection.query(
+          `SELECT created_by FROM charging_station WHERE id = ?`,
+          [id]
+        );
 
-if (action === "REJECT") {
-  const rejectReason =
-    typeof reason === "string" && reason.trim() ? reason.trim() : null;
+        if (station && station.created_by) {
+          await connection.query(
+            `
+        INSERT INTO loyalty_points (
+          customer_id, station_id, points,
+          approved_status, created_at, updated_at
+        )
+        VALUES (?, ?, 3, 'APPROVED', NOW(), NOW())
+        `,
+            [station.created_by, id]
+          );
+        }
+      }
 
-  await connection.query(
-    `
+      await connection.commit();
+      return res.json({ message: "Station approved" });
+    }
+
+    if (action === "REJECT") {
+      const rejectReason =
+        typeof reason === "string" && reason.trim() ? reason.trim() : null;
+
+      await connection.query(
+        `
     UPDATE charging_station
     SET verified = 0,
         approved_status = 'REJECTED',
@@ -758,24 +783,23 @@ if (action === "REJECT") {
         updated_at = NOW()
     WHERE id = ?
     `,
-    [rejectReason, id]
-  );
+        [rejectReason, id]
+      );
 
-  await connection.query(
-    `
+      await connection.query(
+        `
     UPDATE loyalty_points
     SET approved_status = 'REJECTED'
     WHERE station_id = ?
-      AND approved_status = 'PENDING'
     `,
-    [id]
-  );
+        [id]
+      );
 
-  await connection.commit();
-  return res.json({ message: "Station rejected" });
-}
+      await connection.commit();
+      return res.json({ message: "Station rejected" });
+    }
 
-     
+
 
     if (action === "SAVE") {
       await connection.query(
