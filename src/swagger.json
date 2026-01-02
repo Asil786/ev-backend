@@ -1,0 +1,1965 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "EVJoints Admin API",
+    "version": "1.1.0",
+    "description": "API documentation for EVJoints Admin Dashboard backend"
+  },
+  "paths": {
+    "/api/customers": {
+      "get": {
+        "summary": "Get paginated list of customers",
+        "description": "Retrieves a paginated list of customers with their vehicle information, device details, and subscription status. Supports server-side sorting.",
+        "tags": [
+          "Customers"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Page number for pagination"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            },
+            "description": "Number of records per page"
+          },
+          {
+            "in": "query",
+            "name": "sortBy",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "id",
+                "firstName",
+                "lastName",
+                "email",
+                "phone",
+                "customerRegDate",
+                "vehicleRegDate",
+                "registrationNumber",
+                "vehicleType",
+                "manufacturer",
+                "vehicleModel",
+                "subscription"
+              ],
+              "default": "customerRegDate"
+            },
+            "description": "Field to sort by"
+          },
+          {
+            "in": "query",
+            "name": "order",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "desc"
+            },
+            "description": "Sort order (ascending or descending)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with customer data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomersResponse"
+                },
+                "example": {
+                  "data": [
+                    {
+                      "firstName": "John",
+                      "lastName": "Doe",
+                      "email": "john.doe@example.com",
+                      "phone": "9876543210",
+                      "customerRegDate": "2024-01-15T10:30:00.000Z",
+                      "vehicleRegDate": "2024-01-20T14:00:00.000Z",
+                      "registrationNumber": "MH12AB1234",
+                      "subscription": "Premium",
+                      "vehicleType": "Car",
+                      "manufacturer": "Tata",
+                      "vehicleModel": "Nexon EV",
+                      "vehicleVariant": "Max",
+                      "deviceBrand": "Samsung",
+                      "deviceModel": "Galaxy S21",
+                      "devicePlatform": "Android",
+                      "appVersion": "2.1.0",
+                      "navigation": "Yes",
+                      "trip": "Yes",
+                      "checkIn": "Yes",
+                      "vehicles": []
+                    }
+                  ],
+                  "pagination": {
+                    "total": 150,
+                    "page": 1,
+                    "limit": 10
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stations": {
+      "get": {
+        "summary": "Get paginated list of station submissions",
+        "description": "Retrieves a paginated list of charging station submissions with comprehensive filtering options. Supports filtering by status, date range, and search terms. Returns detailed information including station details, network info, connectors, photos, and eVolts.",
+        "tags": [
+          "Stations"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Page number for pagination"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            },
+            "description": "Number of records per page"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "All",
+                "Pending",
+                "Approved",
+                "Rejected"
+              ],
+              "default": "All"
+            },
+            "description": "Filter by approval status"
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Filter stations submitted on or after this date (YYYY-MM-DD)",
+            "example": "2024-01-01"
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Filter stations submitted on or before this date (YYYY-MM-DD)",
+            "example": "2024-12-31"
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search by station name, landmark, contact number, or station ID",
+            "example": "Mumbai Central"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with station data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "example": 123
+                          },
+                          "stationName": {
+                            "type": "string",
+                            "example": "Mumbai Central Charging Hub"
+                          },
+                          "stationNumber": {
+                            "type": "string",
+                            "example": "CS-123"
+                          },
+                          "latitude": {
+                            "type": "number",
+                            "format": "double",
+                            "example": 19.0760
+                          },
+                          "longitude": {
+                            "type": "number",
+                            "format": "double",
+                            "example": 72.8777
+                          },
+                          "networkId": {
+                            "type": "integer",
+                            "nullable": true,
+                            "example": 5
+                          },
+                          "networkName": {
+                            "type": "string",
+                            "example": "Tata Power"
+                          },
+                          "networkStatus": {
+                            "type": "integer",
+                            "example": 1
+                          },
+                          "userId": {
+                            "type": "integer",
+                            "example": 456
+                          },
+                          "userName": {
+                            "type": "string",
+                            "example": "John Doe"
+                          },
+                          "addedByType": {
+                            "type": "string",
+                            "example": "CPO"
+                          },
+                          "contactNumber": {
+                            "type": "string",
+                            "example": "9876543210"
+                          },
+                          "usageType": {
+                            "type": "string",
+                            "enum": [
+                              "Public",
+                              "Private"
+                            ],
+                            "example": "Public"
+                          },
+                          "stationType": {
+                            "type": "string",
+                            "example": "Shopping Mall"
+                          },
+                          "operationalHours": {
+                            "type": "string",
+                            "example": "09:00:00 - 21:00:00"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "Pending",
+                              "Approved",
+                              "Rejected"
+                            ],
+                            "example": "Approved"
+                          },
+                          "statusReason": {
+                            "type": "string",
+                            "nullable": true,
+                            "example": null
+                          },
+                          "submissionDate": {
+                            "type": "string",
+                            "format": "date-time",
+                            "example": "2024-01-15T10:30:00.000Z"
+                          },
+                          "approvalDate": {
+                            "type": "string",
+                            "format": "date-time",
+                            "nullable": true,
+                            "example": "2024-01-20T14:00:00.000Z"
+                          },
+                          "photos": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "/uploads/station_123_1.jpg",
+                              "/uploads/station_123_2.jpg"
+                            ]
+                          },
+                          "connectors": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer",
+                                  "example": 789
+                                },
+                                "chargerTypeId": {
+                                  "type": "integer",
+                                  "example": 2
+                                },
+                                "type": {
+                                  "type": "string",
+                                  "example": "CCS2"
+                                },
+                                "name": {
+                                  "type": "string",
+                                  "example": "CCS Type 2"
+                                },
+                                "count": {
+                                  "type": "integer",
+                                  "example": 2
+                                },
+                                "powerRating": {
+                                  "type": "string",
+                                  "example": "60 kW"
+                                },
+                                "tariff": {
+                                  "type": "string",
+                                  "example": "₹12/kWh"
+                                }
+                              }
+                            }
+                          },
+                          "eVolts": {
+                            "type": "integer",
+                            "example": 500
+                          }
+                        }
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "total": {
+                          "type": "integer",
+                          "example": 150
+                        },
+                        "page": {
+                          "type": "integer",
+                          "example": 1
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "example": 10
+                        }
+                      }
+                    }
+                  }
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Successful response with stations",
+                    "value": {
+                      "data": [
+                        {
+                          "id": 123,
+                          "stationName": "Mumbai Central Charging Hub",
+                          "stationNumber": "CS-123",
+                          "latitude": 19.0760,
+                          "longitude": 72.8777,
+                          "networkId": 5,
+                          "networkName": "Tata Power",
+                          "networkStatus": 1,
+                          "userId": 456,
+                          "userName": "John Doe",
+                          "addedByType": "CPO",
+                          "contactNumber": "9876543210",
+                          "usageType": "Public",
+                          "stationType": "Shopping Mall",
+                          "operationalHours": "09:00:00 - 21:00:00",
+                          "status": "Approved",
+                          "statusReason": null,
+                          "submissionDate": "2024-01-15T10:30:00.000Z",
+                          "approvalDate": "2024-01-20T14:00:00.000Z",
+                          "photos": [
+                            "/uploads/station_123_1.jpg"
+                          ],
+                          "connectors": [
+                            {
+                              "id": 789,
+                              "chargerTypeId": 2,
+                              "type": "CCS2",
+                              "name": "CCS Type 2",
+                              "count": 2,
+                              "powerRating": "60 kW",
+                              "tariff": "₹12/kWh"
+                            }
+                          ],
+                          "eVolts": 500
+                        }
+                      ],
+                      "pagination": {
+                        "total": 150,
+                        "page": 1,
+                        "limit": 10
+                      }
+                    }
+                  },
+                  "empty": {
+                    "summary": "No stations found",
+                    "value": {
+                      "data": [],
+                      "pagination": {
+                        "total": 0,
+                        "page": 1,
+                        "limit": 10
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Database connection failed"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stations/charger-types": {
+      "get": {
+        "summary": "Get available charger types",
+        "tags": [
+          "Stations"
+        ],
+        "responses": {
+          "200": {
+            "description": "List of charger types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "defaultPower": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stations/download": {
+      "get": {
+        "summary": "Download station submissions as CSV with connector-level rows",
+        "description": "Downloads all station submissions matching the current filters as a CSV file. Each connector gets its own row, so stations with multiple connectors will appear multiple times. Respects all active filters (status, date range, search).",
+        "tags": [
+          "Stations"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "All",
+                "Pending",
+                "Approved",
+                "Rejected"
+              ]
+            },
+            "description": "Filter by approval status"
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Filter stations submitted on or after this date (YYYY-MM-DD)",
+            "example": "2024-01-01"
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Filter stations submitted on or before this date (YYYY-MM-DD)",
+            "example": "2024-12-31"
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Search by station name, landmark, contact number, or station ID",
+            "example": "Mumbai Central"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CSV file download with connector-level rows",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "example": "Station ID,Submission Date,Submission Time,Added By Type,Customer Name,Customer Phone,Latitude,Longitude,Network Name,Station Name,Station Number,Connector Type,Connector Name,Connector Count,Power Rating,Tariff,Usage Type,Station Type,Operational Hours,Photo Count,Status,Status Reason,EVolts,Approval Date,Approval Time\n123,15/01/2024,10:30,CPO,John Doe,9876543210,19.076,72.8777,Tata Power,Mumbai Central Charging Hub,CS-123,DC,CCS2,2,60 kW,₹12/kWh,Public,Shopping Mall,09:00 - 21:00,3,Approved,-,500,20/01/2024,14:00"
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Database connection failed"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stations/{id}": {
+      "put": {
+        "summary": "Update station details or status",
+        "description": "Performs actions on a station submission: SAVE, APPROVE, REJECT.",
+        "tags": [
+          "Stations"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Station ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "action"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "SAVE",
+                      "APPROVE",
+                      "REJECT"
+                    ]
+                  },
+                  "stationName": {
+                    "type": "string"
+                  },
+                  "stationType": {
+                    "type": "string"
+                  },
+                  "addedByType": {
+                    "type": "string",
+                    "enum": [
+                      "EV Owner",
+                      "Station Owner",
+                      "CPO"
+                    ]
+                  },
+                  "usageType": {
+                    "type": "string",
+                    "enum": [
+                      "Public",
+                      "Private"
+                    ]
+                  },
+                  "latitude": {
+                    "type": "number"
+                  },
+                  "longitude": {
+                    "type": "number"
+                  },
+                  "contactNumber": {
+                    "type": "string"
+                  },
+                  "open_time": {
+                    "type": "string"
+                  },
+                  "close_time": {
+                    "type": "string"
+                  },
+                  "networkId": {
+                    "type": "integer",
+                    "nullable": true
+                  },
+                  "networkName": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "connectors": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "chargerTypeId": {
+                          "type": "integer"
+                        },
+                        "count": {
+                          "type": "integer"
+                        },
+                        "powerRating": {
+                          "type": "string"
+                        },
+                        "tariff": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Action successful"
+          },
+          "400": {
+            "description": "Invalid action or parameters"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/api/trips": {
+      "get": {
+        "summary": "Get paginated list of trip check-ins",
+        "description": "Retrieves trip records with filtering by status and story presence.",
+        "tags": [
+          "Trips"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 10
+            },
+            "description": "Items per page"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "default": "All"
+            },
+            "description": "Filter by trip status"
+          },
+          {
+            "in": "query",
+            "name": "story",
+            "schema": {
+              "type": "string",
+              "default": "All"
+            },
+            "description": "Filter by story presence"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/trips/story/{id}/": {
+      "put": {
+        "summary": "Update trip story status",
+        "tags": [
+          "Trips"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "Approved",
+                      "Rejected"
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "blogLink": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "action",
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/charging-stations": {
+      "get": {
+        "summary": "Get paginated list of charging stations",
+        "description": "Retrieves a paginated list of approved charging stations with comprehensive filtering options. Supports filtering by operational status, usage type, network, and search terms. Returns detailed information including station details, network info, connectors, and media.",
+        "tags": [
+          "Charging Stations"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            "description": "Page number for pagination"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            },
+            "description": "Number of records per page"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "All",
+                "Active",
+                "Inactive"
+              ],
+              "default": "All"
+            },
+            "description": "Filter by operational status"
+          },
+          {
+            "in": "query",
+            "name": "usageType",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "All",
+                "Public",
+                "Private"
+              ],
+              "default": "All"
+            },
+            "description": "Filter by usage type"
+          },
+          {
+            "in": "query",
+            "name": "networkId",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by network ID (use 'All' for no filter)"
+          },
+          {
+            "in": "query",
+            "name": "addedBy",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "All",
+                "EVJoints",
+                "Users"
+              ],
+              "default": "All"
+            },
+            "description": "Filter by who added the station (EVJoints = CPO, Users = EV Owner/Station Owner)"
+          },
+          {
+            "in": "query",
+            "name": "chargerType",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "All",
+                "AC",
+                "DC"
+              ],
+              "default": "All"
+            },
+            "description": "Filter by charger type (AC or DC)"
+          },
+          {
+            "in": "query",
+            "name": "stationType",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by station type/landmark (use 'All' for no filter)",
+            "example": "Shopping Mall"
+          },
+          {
+            "in": "query",
+            "name": "startDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Filter stations created on or after this date (YYYY-MM-DD)",
+            "example": "2024-01-01"
+          },
+          {
+            "in": "query",
+            "name": "endDate",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Filter stations created on or before this date (YYYY-MM-DD)",
+            "example": "2024-12-31"
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Universal search across all fields: station name, network name, contact, added by, location, station type, usage type, and station ID",
+            "example": "Mumbai"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with charging station data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer",
+                            "example": 123
+                          },
+                          "stationName": {
+                            "type": "string",
+                            "example": "Mumbai Central Charging Hub"
+                          },
+                          "networkName": {
+                            "type": "string",
+                            "example": "Tata Power"
+                          },
+                          "stationContact": {
+                            "type": "string",
+                            "example": "9876543210"
+                          },
+                          "latitude": {
+                            "type": "number",
+                            "format": "double",
+                            "example": 19.0760
+                          },
+                          "longitude": {
+                            "type": "number",
+                            "format": "double",
+                            "example": 72.8777
+                          },
+                          "stationType": {
+                            "type": "string",
+                            "example": "Shopping Mall"
+                          },
+                          "usageType": {
+                            "type": "string",
+                            "enum": [
+                              "Public",
+                              "Private"
+                            ],
+                            "example": "Public"
+                          },
+                          "operationalHours": {
+                            "type": "string",
+                            "example": "09:00:00 - 21:00:00"
+                          },
+                          "submissionTime": {
+                            "type": "string",
+                            "format": "date-time",
+                            "example": "2024-01-15T10:30:00.000Z"
+                          },
+                          "addedBy": {
+                            "type": "string",
+                            "example": "John Doe"
+                          },
+                          "operationalStatus": {
+                            "type": "string",
+                            "enum": [
+                              "Active",
+                              "Inactive"
+                            ],
+                            "example": "Active"
+                          },
+                          "media": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            },
+                            "example": [
+                              "/uploads/station_123_1.jpg",
+                              "/uploads/station_123_2.jpg"
+                            ]
+                          },
+                          "connectors": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "integer",
+                                  "example": 789
+                                },
+                                "connectorType": {
+                                  "type": "string",
+                                  "example": "CCS2"
+                                },
+                                "connector": {
+                                  "type": "string",
+                                  "example": "CCS Type 2"
+                                },
+                                "powerRating": {
+                                  "type": "string",
+                                  "example": "60 kW"
+                                },
+                                "tariff": {
+                                  "type": "string",
+                                  "example": "₹12/kWh"
+                                },
+                                "operationalStatus": {
+                                  "type": "string",
+                                  "enum": [
+                                    "Active",
+                                    "Inactive"
+                                  ],
+                                  "example": "Active"
+                                },
+                                "count": {
+                                  "type": "integer",
+                                  "example": 2
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "total": {
+                          "type": "integer",
+                          "example": 150
+                        },
+                        "page": {
+                          "type": "integer",
+                          "example": 1
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "example": 10
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string",
+                      "example": "Database connection failed"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Add a new charging station",
+        "description": "Creates a new charging station with connectors and photos. Includes comprehensive validation at station and connector levels.",
+        "tags": [
+          "Charging Stations"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "stationName",
+                  "latitude",
+                  "longitude",
+                  "usageType",
+                  "contactNumber"
+                ],
+                "properties": {
+                  "stationName": {
+                    "type": "string",
+                    "example": "Mumbai Central Charging Hub"
+                  },
+                  "stationType": {
+                    "type": "string",
+                    "example": "Shopping Mall"
+                  },
+                  "usageType": {
+                    "type": "string",
+                    "enum": [
+                      "PUBLIC",
+                      "PRIVATE"
+                    ],
+                    "example": "PUBLIC"
+                  },
+                  "latitude": {
+                    "type": "number",
+                    "format": "double",
+                    "example": 19.0760
+                  },
+                  "longitude": {
+                    "type": "number",
+                    "format": "double",
+                    "example": 72.8777
+                  },
+                  "contactNumber": {
+                    "type": "string",
+                    "example": "9876543210"
+                  },
+                  "open_time": {
+                    "type": "string",
+                    "format": "time",
+                    "example": "09:00:00"
+                  },
+                  "close_time": {
+                    "type": "string",
+                    "format": "time",
+                    "example": "21:00:00"
+                  },
+                  "networkId": {
+                    "type": "integer",
+                    "nullable": true,
+                    "example": 5
+                  },
+                  "connectors": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "chargerTypeId",
+                        "count"
+                      ],
+                      "properties": {
+                        "chargerTypeId": {
+                          "type": "integer",
+                          "example": 2
+                        },
+                        "count": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "example": 2
+                        },
+                        "powerRating": {
+                          "type": "string",
+                          "example": "60"
+                        },
+                        "tariff": {
+                          "type": "string",
+                          "example": "15.50"
+                        },
+                        "operationalStatus": {
+                          "type": "string",
+                          "enum": [
+                            "Active",
+                            "Inactive"
+                          ],
+                          "default": "Active"
+                        }
+                      }
+                    }
+                  },
+                  "photos": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "/uploads/station_1.jpg",
+                      "/uploads/station_2.jpg"
+                    ]
+                  }
+                }
+              },
+              "examples": {
+                "complete": {
+                  "summary": "Complete station with connectors",
+                  "value": {
+                    "stationName": "Mumbai Central Charging Hub",
+                    "stationType": "Shopping Mall",
+                    "usageType": "PUBLIC",
+                    "latitude": 19.0760,
+                    "longitude": 72.8777,
+                    "contactNumber": "9876543210",
+                    "open_time": "09:00:00",
+                    "close_time": "21:00:00",
+                    "networkId": 5,
+                    "connectors": [
+                      {
+                        "chargerTypeId": 2,
+                        "count": 2,
+                        "powerRating": "60",
+                        "tariff": "15.50",
+                        "operationalStatus": "Active"
+                      }
+                    ],
+                    "photos": [
+                      "/uploads/station_1.jpg"
+                    ]
+                  }
+                },
+                "minimal": {
+                  "summary": "Minimal required fields",
+                  "value": {
+                    "stationName": "Test Station",
+                    "usageType": "PUBLIC",
+                    "latitude": 19.0760,
+                    "longitude": 72.8777,
+                    "contactNumber": "9876543210"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Station created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "stationId": {
+                      "type": "integer"
+                    }
+                  }
+                },
+                "example": {
+                  "message": "Charging station created successfully",
+                  "stationId": 123
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "examples": {
+                  "stationValidation": {
+                    "summary": "Station validation errors",
+                    "value": {
+                      "message": "Validation failed",
+                      "errors": [
+                        "Station name is required",
+                        "Valid latitude is required"
+                      ]
+                    }
+                  },
+                  "connectorValidation": {
+                    "summary": "Connector validation errors",
+                    "value": {
+                      "message": "Connector validation failed",
+                      "errors": [
+                        "Connector 1: chargerTypeId is required",
+                        "Connector 2: count must be at least 1"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "message": "Database connection failed"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/charging-stations/{id}": {
+      "put": {
+        "summary": "Update charging station or perform actions",
+        "description": "Performs actions on a charging station: EDIT, ENABLE, DISABLE, DELETE.",
+        "tags": [
+          "Charging Stations"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Charging Station ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "action"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "EDIT",
+                      "ENABLE",
+                      "DISABLE",
+                      "DELETE"
+                    ],
+                    "description": "Action to perform on the charging station"
+                  },
+                  "stationName": {
+                    "type": "string",
+                    "description": "Required for EDIT action",
+                    "example": "Mumbai Central Charging Hub"
+                  },
+                  "stationType": {
+                    "type": "string",
+                    "description": "Station landmark/type",
+                    "example": "Shopping Mall"
+                  },
+                  "usageType": {
+                    "type": "string",
+                    "enum": [
+                      "PUBLIC",
+                      "PRIVATE"
+                    ],
+                    "description": "Required for EDIT action",
+                    "example": "PUBLIC"
+                  },
+                  "latitude": {
+                    "type": "number",
+                    "format": "double",
+                    "description": "Required for EDIT action",
+                    "example": 19.0760
+                  },
+                  "longitude": {
+                    "type": "number",
+                    "format": "double",
+                    "description": "Required for EDIT action",
+                    "example": 72.8777
+                  },
+                  "contactNumber": {
+                    "type": "string",
+                    "example": "9876543210"
+                  },
+                  "open_time": {
+                    "type": "string",
+                    "format": "time",
+                    "example": "09:00:00"
+                  },
+                  "close_time": {
+                    "type": "string",
+                    "format": "time",
+                    "example": "21:00:00"
+                  },
+                  "networkId": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "ID of the network",
+                    "example": 5
+                  },
+                  "connectors": {
+                    "type": "array",
+                    "description": "Array of connector configurations (for EDIT action)",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "chargerTypeId": {
+                          "type": "integer",
+                          "example": 2
+                        },
+                        "count": {
+                          "type": "integer",
+                          "example": 2
+                        },
+                        "powerRating": {
+                          "type": "string",
+                          "example": "60"
+                        },
+                        "tariff": {
+                          "type": "string",
+                          "example": "15.50"
+                        },
+                        "operationalStatus": {
+                          "type": "string",
+                          "enum": [
+                            "Active",
+                            "Inactive"
+                          ],
+                          "example": "Active"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "examples": {
+                "edit": {
+                  "summary": "Edit station details",
+                  "value": {
+                    "action": "EDIT",
+                    "stationName": "Mumbai Central Charging Hub",
+                    "stationType": "Shopping Mall",
+                    "usageType": "PUBLIC",
+                    "latitude": 19.0760,
+                    "longitude": 72.8777,
+                    "contactNumber": "9876543210",
+                    "open_time": "09:00:00",
+                    "close_time": "21:00:00",
+                    "networkId": 5,
+                    "connectors": [
+                      {
+                        "chargerTypeId": 2,
+                        "count": 2,
+                        "powerRating": "60",
+                        "tariff": "15.50",
+                        "operationalStatus": "Active"
+                      }
+                    ]
+                  }
+                },
+                "enable": {
+                  "summary": "Enable station",
+                  "value": {
+                    "action": "ENABLE"
+                  }
+                },
+                "disable": {
+                  "summary": "Disable station",
+                  "value": {
+                    "action": "DISABLE"
+                  }
+                },
+                "delete": {
+                  "summary": "Delete station",
+                  "value": {
+                    "action": "DELETE"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Action successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "examples": {
+                  "edit": {
+                    "summary": "Edit success",
+                    "value": {
+                      "message": "Charging station updated successfully"
+                    }
+                  },
+                  "enable": {
+                    "summary": "Enable success",
+                    "value": {
+                      "message": "Charging station enabled successfully"
+                    }
+                  },
+                  "disable": {
+                    "summary": "Disable success",
+                    "value": {
+                      "message": "Charging station disabled successfully"
+                    }
+                  },
+                  "delete": {
+                    "summary": "Delete success",
+                    "value": {
+                      "message": "Charging station deleted successfully"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid action or missing required fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "examples": {
+                  "missingAction": {
+                    "summary": "Missing action",
+                    "value": {
+                      "message": "action is required"
+                    }
+                  },
+                  "invalidAction": {
+                    "summary": "Invalid action",
+                    "value": {
+                      "message": "Invalid action. Must be EDIT, ENABLE, DISABLE, or DELETE"
+                    }
+                  },
+                  "missingFields": {
+                    "summary": "Missing required fields for EDIT",
+                    "value": {
+                      "message": "stationName, latitude, longitude, and usageType are required for EDIT action"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "message": "Database connection failed"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/charging-stations/mass-upload": {
+      "post": {
+        "summary": "Mass upload charging stations via CSV/Excel",
+        "description": "Upload multiple charging stations using a CSV or Excel file with comprehensive validation and error reporting",
+        "tags": [
+          "Charging Stations"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "CSV or Excel file containing station data"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Upload completed with summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "summary": {
+                      "type": "object",
+                      "properties": {
+                        "total": {
+                          "type": "integer"
+                        },
+                        "successful": {
+                          "type": "integer"
+                        },
+                        "failed": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "successfulRows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "row": {
+                            "type": "integer"
+                          },
+                          "stationId": {
+                            "type": "integer"
+                          },
+                          "stationName": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "failedRows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "row": {
+                            "type": "integer"
+                          },
+                          "data": {
+                            "type": "object"
+                          },
+                          "errors": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "message": "Mass upload completed",
+                  "summary": {
+                    "total": 100,
+                    "successful": 95,
+                    "failed": 5
+                  },
+                  "successfulRows": [
+                    {
+                      "row": 2,
+                      "stationId": 123,
+                      "stationName": "Mumbai Station"
+                    }
+                  ],
+                  "failedRows": [
+                    {
+                      "row": 5,
+                      "data": {},
+                      "errors": [
+                        "Station name is required",
+                        "Valid latitude is required"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "No file uploaded or invalid file",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "examples": {
+                  "noFile": {
+                    "summary": "No file uploaded",
+                    "value": {
+                      "message": "No file uploaded"
+                    }
+                  },
+                  "emptyFile": {
+                    "summary": "Empty file",
+                    "value": {
+                      "message": "File is empty"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "message": "File processing error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/networks": {
+      "get": {
+        "summary": "Get all networks",
+        "description": "Returns a list of active and inactive networks.",
+        "tags": [
+          "Networks"
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "active": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Network"
+                      }
+                    },
+                    "inactive": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Network"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/networks/{id}": {
+      "delete": {
+        "summary": "Delete a network",
+        "tags": [
+          "Networks"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Network ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Network deleted successfully"
+          },
+          "404": {
+            "description": "Network not found"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Network": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "liveStatus": {
+            "type": "string"
+          },
+          "approvedStatus": {
+            "type": "string"
+          }
+        }
+      },
+      "CustomersResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "firstName": {
+                  "type": "string"
+                },
+                "lastName": {
+                  "type": "string"
+                },
+                "email": {
+                  "type": "string"
+                },
+                "phone": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer"
+              },
+              "page": {
+                "type": "integer"
+              },
+              "limit": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "TripsResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "pagination": {
+            "type": "object",
+            "properties": {
+              "total": {
+                "type": "integer"
+              },
+              "page": {
+                "type": "integer"
+              },
+              "limit": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": []
+}
