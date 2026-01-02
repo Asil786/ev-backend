@@ -892,6 +892,42 @@ async function approveStation(connection, stationId) {
     `,
     [stationId]
   );
+
+  // Sync Loyalty Points
+  const [[pointRecord]] = await connection.query(
+    `SELECT id FROM loyalty_points WHERE station_id = ?`,
+    [stationId]
+  );
+
+  if (pointRecord) {
+    await connection.query(
+      `
+      UPDATE loyalty_points
+      SET approved_status = 'APPROVED'
+      WHERE station_id = ?
+      `,
+      [stationId]
+    );
+  } else {
+    // Points missing? Insert 3 points reward
+    const [[station]] = await connection.query(
+      `SELECT created_by FROM charging_station WHERE id = ?`,
+      [stationId]
+    );
+
+    if (station && station.created_by) {
+      await connection.query(
+        `
+        INSERT INTO loyalty_points (
+          customer_id, station_id, points,
+          approved_status, created_at, updated_at
+        )
+        VALUES (?, ?, 3, 'APPROVED', NOW(), NOW())
+        `,
+        [station.created_by, stationId]
+      );
+    }
+  }
 }
 
 /**
@@ -905,6 +941,16 @@ async function rejectStation(connection, stationId, reason) {
     WHERE id = ?
     `,
     [reason || "No reason provided", stationId]
+  );
+
+  // Sync Loyalty Points Status
+  await connection.query(
+    `
+    UPDATE loyalty_points
+    SET approved_status = 'REJECTED'
+    WHERE station_id = ?
+    `,
+    [stationId]
   );
 }
 
