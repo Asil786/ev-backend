@@ -596,7 +596,7 @@ router.get("/", async (req, res) => {
         ct.id AS chargerTypeId,
         ct.name AS chargerName,
         ct.type AS chargerType,
-        ct.max_power AS powerRating,
+        c.power AS powerRating,
         c.no_of_connectors,
         c.price_per_khw,
 
@@ -646,8 +646,8 @@ router.get("/", async (req, res) => {
             r.status === "APPROVED"
               ? "Approved"
               : r.status === "REJECTED"
-              ? "Rejected"
-              : "Pending",
+                ? "Rejected"
+                : "Pending",
           submissionDate: r.submissionDate,
           approvalDate: r.status === "APPROVED" ? r.approvalDate : null,
           photos: [],
