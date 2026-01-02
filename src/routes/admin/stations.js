@@ -621,7 +621,7 @@ router.get("/", async (req, res) => {
       `,
       [stationIds]
     );
-
+    // The fix I just applied is c.power AS powerRating,
     const stationMap = new Map();
 
     for (const r of rows) {
