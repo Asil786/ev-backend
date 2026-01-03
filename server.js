@@ -31,6 +31,11 @@ app.use((err, req, res, next) => {
   next();
 });
 
+
+// Serve static files
+app.use('/uploads', express.static('uploads'));
+app.use('/IMAGE', express.static('IMAGE'));
+
 app.use("/api/customers", customerRoutes);
 app.use("/api/stations", stationRoutes);
 app.use("/api/charging-stations", chargingStationRoutes);
