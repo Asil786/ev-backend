@@ -115,7 +115,8 @@ async function fetchStationDetails(stationIds) {
       c.price_per_khw,
 
       lp.eVolts,
-      a.path AS photoPath
+      IF(a.id IS NOT NULL, CONCAT('api/attachment/', a.id), a.path) AS photoPath
+
 
     FROM charging_station cs
     LEFT JOIN network n ON n.id = cs.network_id
