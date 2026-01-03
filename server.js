@@ -36,6 +36,11 @@ app.use((err, req, res, next) => {
 app.use('/uploads', express.static('uploads'));
 app.use('/IMAGE', express.static('IMAGE'));
 
+app.use('/IMAGE', express.static('IMAGE'));
+
+import attachmentRoutes from "./src/routes/admin/attachments.js";
+app.use("/api/attachment", attachmentRoutes);
+
 app.use("/api/customers", customerRoutes);
 app.use("/api/stations", stationRoutes);
 app.use("/api/charging-stations", chargingStationRoutes);
