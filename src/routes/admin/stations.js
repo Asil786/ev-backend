@@ -115,7 +115,11 @@ async function fetchStationDetails(stationIds) {
       c.price_per_khw,
 
       lp.eVolts,
-      IF(a.id IS NOT NULL, CONCAT('api/attachment/', a.id), a.path) AS photoPath
+      CASE 
+        WHEN a.path LIKE 'IMAGE/%' THEN a.path
+        WHEN a.path LIKE 'http%' THEN a.path
+        ELSE CONCAT('api/attachment/', a.id)
+      END AS photoPath
 
 
     FROM charging_station cs
